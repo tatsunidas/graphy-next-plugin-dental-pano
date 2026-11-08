@@ -587,6 +587,26 @@ def env_problem(installed, need):
     return None
 
 
+def cuda_usable(torch):
+    """cuda.is_available() が真でも、入っている torch にこの GPU 用のカーネルが無いことがある（torch 2.15 の既定ビルドは
+    Pascal 世代 sm_61 を含まず、使うと 'no kernel image' で落ちる）。sm_XY は同じ major で minor が自分以下のもの（sm_60 は 6.1 で動く）、
+    PTX（compute_XY）は自分以下のものがあれば JIT で動く"""
+    if not torch.cuda.is_available():
+        return False
+    maj, mi = torch.cuda.get_device_capability(0)
+    for a in torch.cuda.get_arch_list():
+        m = re.fullmatch(r'(sm|compute)_(\d+)[a-z]?', a)
+        if not m:
+            continue
+        n = int(m.group(2))
+        amaj, ami = n // 10, n % 10
+        if m.group(1) == 'sm' and amaj == maj and ami <= mi:
+            return True
+        if m.group(1) == 'compute' and (amaj, ami) <= (maj, mi):
+            return True
+    return False
+
+
 def weights_dir():
     return os.path.join(os.path.expanduser('~'), '.graphy-next', 'models', 'vis-dental-pano')
 
@@ -691,17 +711,19 @@ stage('image', 0.1)
 
 
 def predict(model, **kw):
-    """CUDA のメモリが足りなければ CPU でやり直す（4 GB 級の GPU で 1280 px の x サイズを動かすため）"""
+    """GPU で失敗したら CPU でやり直す（メモリ不足、または torch にこの GPU 用のカーネルが無いとき）。CPU の失敗はそのまま出す"""
     global device
     try:
         return model.predict(img, imgsz=GRAPHY['imgsz'], device=device, verbose=False, **kw)[0]
-    except torch.cuda.OutOfMemoryError:
+    except RuntimeError as e:
+        if device == 'cpu' or not ('CUDA' in str(e) or 'kernel image' in str(e) or isinstance(e, torch.cuda.OutOfMemoryError)):
+            raise
         torch.cuda.empty_cache()
         device = 'cpu'
         return model.predict(img, imgsz=GRAPHY['imgsz'], device='cpu', verbose=False, **kw)[0]
 
 
-device = 0 if torch.cuda.is_available() else 'cpu'
+device = 0 if cuda_usable(torch) else 'cpu'
 valid = {int(f) for f in GRAPHY['permanent']}
 
 tm = YOLO(wstate['teeth']['path'])
@@ -758,7 +780,7 @@ cuda = None
 if installed['torch']:
     try:
         import torch
-        cuda = bool(torch.cuda.is_available())
+        cuda = bool(cuda_usable(torch))
     except Exception as e:
         torch_error = type(e).__name__ + ': ' + str(e)[:200]
 problem = env_problem(installed, need)

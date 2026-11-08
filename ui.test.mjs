@@ -261,6 +261,27 @@ test("installCommand: 不足だけを、使われる Python を名指しして�
   assert.match(installCommand("C:\\Program Files\\Py\\python.exe", { ultralytics: null, torch: null }, need), /^"C:\\Program Files\\Py\\python\.exe" -m pip install ultralytics torch$/);
 });
 
+test("cuda_usable: torch にこの GPU 用のカーネルがあるときだけ真（実機で踏んだ: 2.15 の既定ビルドは GTX 1050 Ti = sm_61 に無い）", () => {
+  const r = py(HEAD() + PY_PREP + `
+class Cu:
+    def __init__(self, avail, cc, archs): self.a, self.cc, self.ar = avail, cc, archs
+    def is_available(self): return self.a
+    def get_device_capability(self, i): return self.cc
+    def get_arch_list(self): return self.ar
+class T:
+    def __init__(self, *a): self.cuda = Cu(*a)
+cu132 = ['sm_75', 'sm_80', 'sm_86', 'sm_90', 'sm_100', 'sm_120']
+cu126 = ['sm_50', 'sm_60', 'sm_70', 'sm_75', 'sm_80', 'sm_86', 'sm_90']
+cases = [
+  (True, (6, 1), cu132), (True, (6, 1), cu126), (True, (7, 5), cu132), (True, (8, 9), ['sm_80']),
+  (True, (8, 0), ['sm_86']), (False, (8, 6), cu126), (True, (8, 9), ['compute_80']), (True, (7, 0), ['compute_80']),
+  (True, (12, 0), cu132),
+]
+print(json.dumps([cuda_usable(T(*c)) for c in cases]))`);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout.trim()), [false, true, true, true, false, false, true, false, true]);
+});
+
 test("weights_state / weights_problem: 必須の重みが無ければ置き場つきで止める。任意の重みは無くても通る。sha256 不一致は止める", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "dp-home-"));
   try {
@@ -490,6 +511,7 @@ test("diagnosisByClass: 種類ごとに歯番号を昇順でまとめる。歯�
 test("PY の本処理は ultralytics の API を想定どおりに呼ぶ（呼び出しの形の静的確認）", () => {
   assert.match(PY, /retina_masks=True/);
   assert.match(PY, /r\.masks\.xy/);
-  assert.match(PY, /torch\.cuda\.OutOfMemoryError/);
+  assert.match(PY, /kernel image/);
+  assert.match(PY, /cuda_usable\(torch\)/);
   assert.match(PY_PROBE, /weights_state\(\)/);
 });
