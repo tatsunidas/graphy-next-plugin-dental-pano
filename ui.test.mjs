@@ -135,7 +135,7 @@ test("buildAnalysisResult: caveats が 1 つ以上、kind は plugin、sop は�
   assert.equal("sopInstanceUids" in buildAnalysisResult(res, "en", null), false);
 });
 
-test("buildCsv: BOM・CRLF・見出し・行の種類。数式として解釈される文字列は保護する", () => {
+test("buildCsv: BOM・CRLF・見出し・行の種類。自由な文字列は入らない", () => {
   const res = normalizeResult({ teeth: [tooth(16, 0)], dx: [{ cls: "caries", conf: 0.8, bbox: [1, 1, 5, 5] }] });
   const csv = buildCsv(res);
   assert.ok(csv.startsWith("\ufeffkind,fdi,class,confidence,x0,y0,x1,y1,overlap_with_tooth\r\n"));
@@ -143,7 +143,7 @@ test("buildCsv: BOM・CRLF・見出し・行の種類。数式として解釈さ
   assert.equal(lines.filter((l) => l.startsWith("tooth,")).length, 1);
   assert.equal(lines.filter((l) => l.startsWith("diagnosis,16,caries")).length, 1);
   assert.equal(lines.filter((l) => l.startsWith("not_detected,")).length, 31);
-  assert.ok(!/(^|,)[=+@]/.test(lines.slice(1).join("\n")));
+  assert.ok(lines.slice(1).every((l) => l.split(",").length === 9), "全行が 9 列");
 });
 
 test("chartModel: 32 マス・上顎が上段・中央に隙間・検出と診断が反映される", () => {

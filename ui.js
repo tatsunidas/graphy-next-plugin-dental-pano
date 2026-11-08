@@ -398,13 +398,9 @@ export function buildSrRequest(res, lang) {
   return { seriesDescription: "Dental panoramic AI draft", documentTitle: s.rTitle, groups: [], findings };
 }
 
-/** CSV（UTF-8・BOM 付き・数式として解釈されないよう、先頭が = + - @ の文字列は引用符＋アポストロフィで保護） */
+/** CSV（UTF-8・BOM 付き）。値は検証済みの数値と固定のクラス名だけで、自由な文字列は入らない */
 export function buildCsv(/** @type {ReturnType<typeof normalizeResult>} */ res) {
-  const esc = (/** @type {any} */ v) => {
-    let t = v == null ? "" : String(v);
-    if (/^[=+\-@\t\r]/.test(t) && !/^-?\d+(\.\d+)?$/.test(t)) t = "'" + t;
-    return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-  };
+  const esc = (/** @type {any} */ v) => (v == null ? "" : String(v));
   const rows = [["kind", "fdi", "class", "confidence", "x0", "y0", "x1", "y1", "overlap_with_tooth"]];
   for (const t of res.teeth) rows.push(["tooth", t.fdi, "", t.conf.toFixed(3), ...t.bbox.map((v) => v.toFixed(1)), ""]);
   for (const d of res.dx ?? []) rows.push(["diagnosis", d.fdi ?? "", d.cls, d.conf.toFixed(3), ...d.bbox.map((v) => v.toFixed(1)), d.overlap.toFixed(3)]);
