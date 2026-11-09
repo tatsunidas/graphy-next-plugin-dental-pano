@@ -485,6 +485,8 @@ export interface VesselModel {
   segments: VesselSegment[];
   calibration: VesselCalibration;
   provenance: VesselProvenance;
+  /** このモデルを登録したプラグイン（`registerVesselModel`）。本体の 3D QCA が作ったモデルには無い。 */
+  producer?: { pluginId: string; pluginName: string; version: string };
   at: number;
 }
 
@@ -522,6 +524,15 @@ export interface VesselAnalysisInput {
   /** 提供元の免責文。**そのまま画面に出る**（本体は要約も書き換えもしない）。 */
   disclaimer?: string;
 }
+
+/** `host.registerVesselModel()` に渡すモデル。`runId` / `at` / 出自は host が決めるので含まない。 */
+export type VesselModelInput = Omit<VesselModel, "runId" | "at" | "producer"> & {
+  /** 同じ鍵で登録し直すと置き換わる。1〜200 文字。 */
+  runKey: string;
+};
+
+/** `host.registerVesselModel()` の戻り。 */
+export type RegisterVesselModelResult = { ok: true; runId: string } | { ok: false; error: string };
 
 /** `host.putVesselAnalysis()` の戻り。 */
 export interface VesselAnalysisResult {
@@ -589,6 +600,72 @@ export interface XaCine {
   frameStartTimesMs: number[];
   /** フレーム間隔が一様か。false なら「フレーム差 × 1/fps」は実時間と合わない。 */
   uniform: boolean;
+}
+
+/**
+ * XA の**投影幾何**。`host.getXaGeometry()` の戻り。**H41**。
+ *
+ * <p>2 方向のアンギオを対応付ける・3D に再構成するのに要る。座標系は患者 LPS（mm）。
+ * 角度は DICOM の `PositionerPrimaryAngle (0018,1510)` / `PositionerSecondaryAngle (0018,1511)` のまま（度）。
+ *
+ * <p>🔴 **読めないときは `geometry` が null で、理由が `missing` に入る。** 0 や既定値で埋めない。
+ * `imagerSpacingMm` は**検出器面**の値で、`SpatialCalibration` の校正済み mm/px とは別物
+ * （3D 再構成は校正値を使わない）。
+ *
+ * <p>⚠️ 主点は**画像中心と仮定**している（`FieldOfView*` による切り出しや装置側の回転・反転があるとずれる）。
+ * dataSet が**プリウォーム前**なら `missing` は `"noDataSet"`。シネを一度開けば温まる。
+ */
+export interface XaGeometry {
+  tileId: string;
+  imageId: string;
+  /** 読んだフレーム（0 origin）。 */
+  frameIndex: number;
+  geometry: XaViewGeometry | null;
+  missing: "noDataSet" | "noAngles" | "noDistances" | "noImagerSpacing" | "noImageSize" | null;
+  /** 角度がフレームごとに変わる収集（回転 DSA など）か。 */
+  perFrameAngles: boolean;
+}
+
+/** `host.readXaSeries()` の戻り。**H42**。 */
+export interface XaSeriesInfo {
+  seriesUid: string;
+  studyUid: string;
+  sopInstanceUid: string;
+  /** 1 を超えるとき、ここで扱うのは先頭インスタンスだけ。 */
+  instanceCount: number;
+  /** 先頭インスタンスのフレーム数。タグから読めなければ null（1 で埋めない）。 */
+  frameCount: number | null;
+  rows: number | null;
+  cols: number | null;
+  geometry: XaViewGeometry | null;
+  missing: "noDataSet" | "noAngles" | "noDistances" | "noImagerSpacing" | "noImageSize" | null;
+  perFrameAngles: boolean;
+}
+
+/** `host.readXaSeriesFrame()` の戻り。**H42**。 */
+export interface XaSeriesFrame {
+  seriesUid: string;
+  frameIndex: number;
+  rows: number;
+  cols: number;
+  /** 校正済みの画素（行優先）。表示 W/L は掛かっていない。 */
+  data: Float32Array;
+  unit: string;
+}
+
+export interface XaViewGeometry {
+  /** 一次角 [度]（LAO/RAO）。 */
+  primaryAngleDeg: number;
+  /** 二次角 [度]（CRA/CAU）。 */
+  secondaryAngleDeg: number;
+  /** 線源〜検出器 [mm]。 */
+  sidMm: number;
+  /** 線源〜等中心 [mm]。 */
+  sodMm: number;
+  /** 検出器面のピクセル間隔 [行, 列] [mm]。 */
+  imagerSpacingMm: [number, number];
+  /** 主点 [x, y] [px]。 */
+  principalPoint: [number, number];
 }
 
 /** `getPixelData` の任意指定。**0.1.9 以降**。 */
@@ -1123,6 +1200,30 @@ export interface PluginCurveFrame {
   arcLengthMm: number;
 }
 
+/** {@link Viewer2DPluginHost.openCurvedMpr} の引数（H73）。 */
+export interface PluginCurvedMprSpec {
+  /** 開いているタイルのシリーズ。 */
+  source: PluginSeriesRef;
+  /** 制御点（患者 LPS mm、2 点以上、順序つき）。 */
+  centerline: [number, number, number][];
+  /** 省略した項目は窓の既定。`frameMode` だけは省略時 `ROTATION_MINIMIZING`。 */
+  options?: {
+    frameMode?: "FIXED_Z" | "ROTATION_MINIMIZING";
+    projection?: "CENTERLINE_ONLY" | "AVERAGE" | "MIP" | "MINIP";
+    bandHalfWidthMm?: number;
+    /** [min, max]（mm、min < max）。 */
+    secondAxisRangeMm?: [number, number];
+    arcStepMm?: number;
+  };
+  /** 窓の札に出す短い説明。出所のプラグイン名は host が必ず付ける。 */
+  title?: string;
+}
+
+export interface PluginCurvedMprResult {
+  ok: boolean;
+  error?: string;
+}
+
 export interface PluginCurveFrameOptions {
   /** フレームどうしの弧長間隔 mm。正の有限値。 */
   spacingMm: number;
@@ -1164,8 +1265,9 @@ interface PluginHostBase {
    *
    * <p>⚠ **患者の画素を第三者クラウドへ出す API である。** 使うには `plugin.json` の
    * `permissions` に `"ai-egress"` を宣言すること（未宣言なら `permission-denied` で弾かれる。
-   * これは実際に強制される数少ない権限のひとつ）。送信のたびに、**送る画像とプロンプト全文を
-   * 見せた同意ダイアログ**が本体側で出る。同意が効くのはセッション内・同一 `scopeKey` のみ。
+   * これは実際に強制される数少ない権限のひとつ）。送信前に、**宛先・指示・画像のサムネイルを
+   * 見せた確認ダイアログ**が本体（Electron main）から出る（宛先がローカルのときは出ない）。確認が効くのはセッション内・
+   * 同一 `scopeKey` のみ。確認と監査ログは本体の main が行うので、`host.ai` を経由せず直接呼んでも省けない。
    *
    * <p>例外は投げず `{ok:false, error}` で返る。`error:"canceled"` はユーザーが送信を
    * 取り消しただけなので、**エラーとして表示しないこと**。デスクトップ専用。
@@ -1224,6 +1326,22 @@ interface PluginHostBase {
      * 確保していなければ `{ok:true, released:false}`。次の `runJob` が自動で確保し直す。
      */
     releaseRuntime: (endpointId: string, opts?: { ask?: boolean }) => Promise<ComputeReleaseOutcome>;
+    /**
+     * 同じコードを入力の組ごとに走らせる（一括・**0.5.0 以降**）。**同意は全組で 1 回**——本体の窓が全組の行
+     * （種類・枚数・形式・大きさ・SHA-256）と合計、コードの全文を見せる。送れない組（焼き込み・格子など）は外れて
+     * `refused` に理由が出る（黙って減らさない）。組が終わるたびに `onItem` が届き、全部終わると返る。
+     * 1 組が落ちても残りは続く。計算機に届かなくなると一時停止し（残りは失敗にしない）`paused: true` で返る
+     * （続きは利用者が計算ジョブの窓で［再開］を押す）。実行は本体の台帳が持つので、画面を閉じても計算は続く。
+     * 例外は投げない。デスクトップ専用。
+     */
+    runBatch: (opts: ComputeRunBatchOptions, bopts?: ComputeBatchOptions) => Promise<ComputeBatchOutcome>;
+    /** 自分のプラグインの計算ジョブの一覧（患者名は含まない）。 */
+    listJobs: (opts?: { batchId?: string; uncollectedOnly?: boolean }) => Promise<ComputeJobSummary[]>;
+    /**
+     * 画面を閉じている間に終わった組のうち、受け取っていないものを `onItem` で届ける。届いた組は
+     * `item.markCollected()` で受け取り済みにする（計算ジョブの窓に「受け取り済み」と出る）。
+     */
+    attach: (batchId: string, bopts?: ComputeBatchOptions) => Promise<ComputeBatchOutcome>;
   };
   /**
    * **保管庫の画像を手元に確保する**（H67・**0.5.0 以降**）。Drive が正本のモード（手元は上限つきのキャッシュ）で、
@@ -1277,6 +1395,15 @@ interface PluginHostBase {
      * これを呼ぶのはプラグインが別の経路で DB を変えたときだけ。
      */
     notifyChanged: (detail?: { studyUids?: string[]; patientId?: string }) => void;
+    /**
+     * **保管庫のシリーズを、本体の窓で選んでもらう**（H72・**0.5.0 以降**）。検索・絞り込み（患者名・ID・検査日・種類）を
+     * して、スタディを展開してシリーズにチェックを入れる。返すのは**選んだ順の UID だけ**（`[{studyUid, seriesUid}]`）で、
+     * 患者名・記述は窓には出るがプラグインには渡らない。取り消し（Esc）は空配列。新しい権限・同意は要らない
+     * （外へ出すのは `compute.runBatch` の同意が別に聞く）。同時に出すのは 1 つで、2 件目以降は順番を待つ。
+     * `modalities`（`["CT"]` など）を渡すと、その種類のシリーズだけ選べる。例外は投げない。
+     * 結果はそのまま `compute.runBatch` の `items` に使える（組の名前 `key` には患者名を入れないこと）。
+     */
+    pickSeries: (opts?: PickSeriesOptions) => Promise<PickedSeries[]>;
   };
   /**
    * **動画の取り込み**（H47〜H49・**0.3.0 以降**）。standalone 専用。
@@ -1535,6 +1662,123 @@ export interface ComputeRunJobOptions {
   endpointId?: string;
   /** 秒。既定 3600・上限 6 時間。 */
   timeoutSec?: number;
+}
+
+/** `host.db.pickSeries()` の設定（H72）。 */
+export interface PickSeriesOptions {
+  /** 窓のタイトル（120 字まで）。 */
+  title?: string;
+  /** 選べるシリーズの種類（`["CT"]` など。英大文字）。窓の絞り込みの初期値になり、それ以外のシリーズは選べない。 */
+  modalities?: string[];
+  /** 複数選べるか。既定 true。 */
+  multiple?: boolean;
+}
+
+/** `host.db.pickSeries()` が返す 1 件。**UID だけ**（患者名・記述は渡さない）。 */
+export interface PickedSeries {
+  studyUid: string;
+  seriesUid: string;
+}
+
+/** `host.compute.runBatch()` の 1 組（同じコードを組ごとに走らせる）。 */
+export interface ComputeBatchItemInput {
+  /** 組の名前。英数字・`. _ -` の 64 字まで・重複不可。**患者名を入れないこと**（台帳・監査に残る）。 */
+  key: string;
+  /** 0〜8 件（1 組 = 計算機の上の 1 回の実行）。 */
+  inputs: ComputeJobInput[];
+}
+
+/** `host.compute.runBatch()` の引数。 */
+export interface ComputeRunBatchOptions {
+  /** 全組で同じコード（64KB まで）。 */
+  script: string;
+  items: ComputeBatchItemInput[];
+  /** `ComputeRunJobOptions.endpointId` と同じ。 */
+  endpointId?: string;
+  /** 1 組あたりの秒。既定 3600・上限 6 時間。 */
+  timeoutSec?: number;
+}
+
+/** 一括で送れずに外した組。 */
+export interface ComputeBatchRefused {
+  key: string;
+  /** 理由のコード（焼き込み・格子など。例 `series-not-found`）。 */
+  reason: string;
+}
+
+/** 一括の見守りの設定。 */
+export interface ComputeBatchOptions {
+  /** 組が終わるたびに呼ぶ（同じ組を 2 度は呼ばない）。 */
+  onItem?: (item: ComputeBatchItemOutcome) => void;
+  /** 終わった組の割合（0..1）と一言。 */
+  onProgress?: (fraction: number, message: string) => void;
+  /** 承認・投入が済んだ直後（`runBatch` のみ）。 */
+  onStarted?: (info: { batchId: string; items: { key: string; jobId: string }[]; refused: ComputeBatchRefused[] }) => void;
+  /** abort すると一括を中止する（待ちの組は計算機へ何も送らず、実行中の組は中断する）。 */
+  signal?: AbortSignal;
+  /** 台帳を読む間隔（ミリ秒）。既定 1000。 */
+  pollMs?: number;
+}
+
+/** 終わった 1 組の結果。`runJob` の結果と同じ形に、組の名前と受け取りの印が付く。 */
+export type ComputeBatchItemOutcome = {
+  key: string | null;
+  jobId: string;
+  /** 同じ組の試行の番号。利用者が計算ジョブの窓で［再実行］すると 2 以降が届く（同じ `key` のうち最大のものが最新）。 */
+  attempt: number;
+  markCollected: () => Promise<void>;
+} & (
+  | {
+      ok: true;
+      /** `error` は Python の例外（組としては走り終えている）。 */
+      status: "ok" | "error";
+      stdout: string;
+      stderr: string;
+      errorName?: string;
+      errorValue?: string;
+      traceback?: string[];
+      files: ComputeOutputFile[];
+      readFile: (name: string) => Promise<Uint8Array | null>;
+    }
+  | { ok: false; cancelled?: boolean; error: string }
+);
+
+export interface ComputeBatchCounts {
+  done: number;
+  failed: number;
+  cancelled: number;
+  interrupted: number;
+  total: number;
+}
+
+/** `runBatch` / `attach` の結果。 */
+export type ComputeBatchOutcome =
+  | {
+      ok: true;
+      batchId: string;
+      counts: ComputeBatchCounts;
+      refused: ComputeBatchRefused[];
+      /** 計算機に届かなくなって一時停止中。残りは待ちのまま（失敗にしていない）。 */
+      paused?: boolean;
+      reason?: string;
+      cancelled?: boolean;
+    }
+  | { ok: false; cancelled?: boolean; error: string; neededBytes?: number; freeBytes?: number; refused?: ComputeBatchRefused[] };
+
+/** `host.compute.listJobs()` の 1 行（患者名は含まない）。 */
+export interface ComputeJobSummary {
+  jobId: string;
+  batchId: string | null;
+  key: string | null;
+  /** 同じ組の試行の番号（再実行で 2 以降）。 */
+  attempt: number;
+  state: "QUEUED" | "RUNNING" | "AWAITING_USER" | "DONE" | "FAILED" | "CANCELLED" | "INTERRUPTED";
+  /** 失敗・中断の分類（`code-error` `timeout` `endpoint-unreachable` `dataset-changed` …）。 */
+  reason: string | null;
+  errorName: string | null;
+  errorValue: string | null;
+  outputsBytes: number | null;
+  collected: boolean;
 }
 
 /** `outputs/` のファイル。 */
@@ -1799,6 +2043,21 @@ export interface Viewer2DPluginHost extends PluginHostBase {
    */
   getXaCine: (tileId?: string) => XaCine | null;
   /**
+   * 対象タイルの **XA 投影幾何**（撮影角度・SID・SOD・検出器のピクセル間隔・主点）（**H41**）。
+   * XA / XRF でなければ null。読めないときは `geometry` が null で理由が `missing` に入る。
+   */
+  getXaGeometry: (tileId?: string) => XaGeometry | null;
+  /**
+   * **開いていない XA シリーズ**の幾何・フレーム数・画像サイズ（**H42**）。2 方向（A・B）を 1 つのプラグイン窓で
+   * 同時に扱うための口。読めない部分は null（理由は `missing`）。対象は**先頭インスタンス**。
+   */
+  readXaSeries: (ref: PluginSeriesRef) => Promise<XaSeriesInfo | null>;
+  /**
+   * **開いていない XA シリーズの 1 フレーム**の校正済み画素（**H42**）。`frameIndex` は 0 起点、範囲外は null。
+   * `loadVolume` は IPP の無い XA シネに使えないので、こちらを使う。
+   */
+  readXaSeriesFrame: (ref: PluginSeriesRef, frameIndex: number) => Promise<XaSeriesFrame | null>;
+  /**
    * **再構成済み 3D 血管モデルの一覧**（**H11**）。新しい順。まだ無ければ空配列。
    * 点列を含まない要約だけを返す（本体は `getVesselModel()` で取る）。
    */
@@ -1825,6 +2084,13 @@ export interface Viewer2DPluginHost extends PluginHostBase {
    * 退化した `range`）。捨てて残りを採用すると**ずれたまま色が乗り**、誰も気付けない。
    */
   putVesselAnalysis: (runId: string, result: VesselAnalysisInput) => VesselAnalysisResult;
+  /**
+   * **プラグインが作った 3D 血管モデルを登録する**（**H73**）。本体の 3D 表示と `listVesselModels` / `getVesselModel`
+   * が読む登録簿へ入る。同じ `runKey` は置き換える。セッション限り。`runId` / 登録時刻 / 出自は host が入れる。
+   * 🔴 壊れた入力は理由つきで拒否する。測れなかった点の径は `null`（0 で埋めない）。未校正
+   * （`calibration.diameterCalibrated: false`）なら**全点 null**でなければ拒否する。
+   */
+  registerVesselModel: (model: VesselModelInput) => RegisterVesselModelResult;
   /**
    * 処理結果（値マップ）を**表示中スライスへ重ねて見せる**。`tileId` 省略時は対象の先頭タイル。
    * rows/cols が現在スライスと不一致なら false。**0.1.9 以降**。
@@ -1937,6 +2203,42 @@ export interface Viewer2DPluginHost extends PluginHostBase {
    */
   setRoiMeta: (roiUid: string, patch: Record<string, string>) => boolean;
   /**
+   * **ROI（楕円・矩形）を、表示中のスライスへ作る。**（次の版以降）`tileId` 省略時は対象タイルの先頭。
+   *
+   * <p>中心は、患者座標 LPS（mm）の `centerLps`、または表示中のスライスの画素座標 `[列, 行]` の `centerPx`
+   * （`getRois()` の `points` と同じ座標。2D の画素だけを扱うプラグイン用）の**どちらか一方**。LPS の中心は表示中の
+   * スライスの面内であること。面外は `off-slice` で拒否される（黙って別のスライスへ作らない）。成功すると、作った ROI の中心（LPS）も返る。半径（矩形は半幅）`radiiMm` は**表示の水平・垂直方向**の mm。
+   * 楕円・矩形は Cornerstone の定義で表示の軸に揃うため、回転・反転した表示でも、見えている向きの半径になる。
+   *
+   * <p>作った ROI には**本体が**出自の印（このプラグイン）とラベルを付けるので、ROI マネージャで見分けられる。
+   * 保存は本体が予約する。`removeCreatedRoi` で、**このプラグインが作った ROI だけ**を消せる
+   * （本体や他プラグインの ROI は消せない）。
+   *
+   * <p>**多角形・自由曲線も作れる**（`tool: "PolygonROI" | "FreehandROI"`）。頂点を `verticesLps`（LPS mm）か `verticesPx`（表示中スライスの画素座標）の
+   * **どちらか一方**で順に渡す（閉じるので始点を繰り返さない。多角形 3〜64 点、自由曲線 3〜256 点）。全頂点が表示中のスライスの面内であること。
+   * 自己交差・面積ゼロの形は `self-intersecting` / `degenerate` で拒否する。`radiiMm` / `centerLps` / `centerPx` は使わない。
+   *
+   * <p>AI ツール（`effect: "write"`）の中から呼ぶ場合、その実行の前に本体が利用者の確認を出す。
+   * 失敗の理由: `bad-request`（ツール・数値が不正）／`off-slice`／`too-large`（半径が画像の大きさを超える）／
+   * `self-intersecting`／`degenerate`（多角形・自由曲線のみ）／`no-geometry`／`no-image`／`thick-slab`（ThickSlab 表示中は作れない）／`failed`。
+   */
+  createRoi: (
+    tileId: string | undefined,
+    req: {
+      tool: "EllipticalROI" | "RectangleROI" | "PolygonROI" | "FreehandROI";
+      centerLps?: [number, number, number];
+      centerPx?: [number, number];
+      radiiMm?: [number, number];
+      verticesLps?: [number, number, number][];
+      verticesPx?: [number, number][];
+      label?: string;
+    },
+  ) => { ok: true; roiUid: string; centerLps: [number, number, number] } | { ok: false; reason: "bad-request" | "off-slice" | "no-geometry" | "too-large" | "no-image" | "thick-slab" | "self-intersecting" | "degenerate" | "failed" };
+  /** `createRoi` で**このプラグインが作った** ROI だけを消す（ロック中・他の ROI は消えず false）。（次の版以降） */
+  removeCreatedRoi: (roiUid: string) => boolean;
+  /** `showLabelVolume` で**このプラグインが出した** Mask（返った `segmentationId`）だけを消す（本体・他プラグイン・利用者の Mask、ロック中は消えず false）。 */
+  removeLabelVolume: (segmentationId: string) => boolean;
+  /**
    * ROI の追加・変更・削除を購読する。返り値を呼ぶと解除（ダイアログを閉じるときは必ず解除する）。
    * **何が変わったかは渡さない**ので、通知を受けたら `getRois()` を読み直すこと。
    */
@@ -2048,6 +2350,16 @@ export interface Viewer2DPluginHost extends PluginHostBase {
     polylineWorld: readonly [number, number, number][],
     opts: PluginCurveFrameOptions,
   ) => PluginCurveFrame[];
+  /**
+   * **中心線を渡して、本体の Curved MPR 窓を開く**（H73）。渡すのは制御点（患者 LPS mm・2 点以上）と
+   * 見え方のオプションだけで、再構成・表示・保存は本体が行う。窓には「プラグイン <名前> が指定した
+   * 中心線」の札が出る（出所は host が入れる）。窓が既に開いていれば、その窓の中心線が置き換わる。
+   *
+   * <p>🔴 戻り値は**検証と起動要求まで**（2 点未満・非有限・同一点・開いていないシリーズは `ok:false`
+   * で窓を開かない）。ボリュームの範囲外の点は戻り値では返せず、窓の警告として出る。
+   * `options.frameMode` の省略時は `ROTATION_MINIMIZING`（血管向け）。
+   */
+  openCurvedMpr: (spec: PluginCurvedMprSpec) => Promise<PluginCurvedMprResult>;
   /**
    * **シリーズビューパネルをそのまま貸す**（H34・**0.2.1 以降**）。W/L バー・スライダ・
    * ThickSlab・参照線・計測・シネ、そして**フュージョン重畳**が丸ごと付いてくる。
@@ -2294,6 +2606,18 @@ export type PluginHost = Viewer2DPluginHost | MainScreenPluginHost;
  */
 export interface PluginModule {
   activate(host: PluginHost): void | Promise<void>;
+  /**
+   * AI アシスタントから呼ばれるツールの実装。`plugin.json` の `permissions` に `"ai-tools"`、`aiTools` に同名の宣言が要る
+   * （無いものは呼ばれない）。宣言の `effect` は `"read"`・`"display"`・`"write"`。`"write"`（データを変える）は**実行のたびに本体が
+   * 利用者の確認を出し**、拒否されると呼ばれない。2D 窓が呼び出し時にだけ読み込み、`activate` は呼ばない。
+   * 🔴 **宣言を超える `host` の呼び出しは止まる**: `"read"` は読み取りと計算、`"display"` はそれに表示・遷移まで。保存・ROI の作成や変更・
+   * 外部への送信など書き込み系のメンバに触れた時点で、ツールは `effect-violation` で失敗する（例外を握りつぶしても失敗になる）。
+   * 書き込みをするツールは `"write"` と宣言すること。
+   * 待ち時間は既定 30 秒。外部計算機のように時間のかかるツールは、宣言に整数 `timeoutSec`（5〜900）を書くと、その秒数まで待つ
+   * （範囲外はそのツールが無効になる。利用者の確認の経路は変わらない）。
+   * 戻り値は JSON にできる値（深さ 3・4 KB まで）。AI には信用できないデータとして渡る。
+   */
+  aiTools?: Record<string, (args: Record<string, unknown>, host: PluginHost) => unknown | Promise<unknown>>;
 }
 
 /** `host.file.saveJobArtifact()` の指定（H53）。 */

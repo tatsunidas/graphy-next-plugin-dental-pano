@@ -1,0 +1,12 @@
+{
+  "name": "graphy-next-plugin-dental-pano",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "verify": "node --test"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}
