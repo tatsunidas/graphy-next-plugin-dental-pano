@@ -15,15 +15,15 @@
 export const PLUGIN_ID = "vis-dental-pano";
 
 /**
- * 重み。置き場は ~/.graphy-next/models/vis-dental-pano/。sha256 が空のあいだは版の固定が済んでいない（試作）。
+ * 重み。置き場は ~/.graphy-next/models/vis-dental-pano/。teeth は Kölüş & Güleç 2025（Mendeley Data、CC BY 4.0、doi:10.17632/83k2rtz4bc.1）の YOLO11x-seg そのまま。sha256 が空のものは版の固定が済んでいない（試作）。
  * dx は任意（無ければ歯と欠損歯だけを出す）。
  */
 export const WEIGHTS = {
-  teeth: { file: "teeth-seg.pt", sha256: "", required: true, task: "seg" },
+  teeth: { file: "teeth-seg.pt", sha256: "2d0c07b878e9f9730eb845a901e85abf3535d49cf4034d2246592f76201ac8af", required: true, task: "seg" },
   dx: { file: "dx-det.pt", sha256: "", required: false, task: "detect" },
 };
 /** 動作を確かめた ultralytics の版（空なら版は問わない） */
-export const ULTRALYTICS = "";
+export const ULTRALYTICS = "8.4.208";
 /** 検出の信頼度のしきい値（モデル出力の下限。統計的に導いた値ではなく、既定の運用値） */
 export const CONF = { teeth: 0.25, dx: 0.25 };
 export const IMGSZ = 1280;
