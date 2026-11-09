@@ -512,6 +512,8 @@ test("PY の本処理は ultralytics の API を想定どおりに呼ぶ（呼�
   assert.match(PY, /retina_masks=True/);
   assert.match(PY, /r\.masks\.xy/);
   assert.match(PY, /kernel image/);
+  assert.match(PY, /cuDNN\|CUDNN/);
+  assert.match(PY, /unable to find an engine/);
   assert.match(PY, /cuda_usable\(torch\)/);
   assert.match(PY_PROBE, /weights_state\(\)/);
 });

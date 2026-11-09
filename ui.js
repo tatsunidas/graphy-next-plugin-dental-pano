@@ -711,12 +711,12 @@ stage('image', 0.1)
 
 
 def predict(model, **kw):
-    """GPU で失敗したら CPU でやり直す（メモリ不足、または torch にこの GPU 用のカーネルが無いとき）。CPU の失敗はそのまま出す"""
+    """GPU で失敗したら CPU でやり直す（メモリ不足、torch にこの GPU 用のカーネルが無い、cuDNN が古い GPU に非対応、のとき）。CPU の失敗はそのまま出す"""
     global device
     try:
         return model.predict(img, imgsz=GRAPHY['imgsz'], device=device, verbose=False, **kw)[0]
     except RuntimeError as e:
-        if device == 'cpu' or not ('CUDA' in str(e) or 'kernel image' in str(e) or isinstance(e, torch.cuda.OutOfMemoryError)):
+        if device == 'cpu' or not (re.search(r'CUDA|cuDNN|CUDNN|kernel image|unable to find an engine|out of memory', str(e)) or isinstance(e, torch.cuda.OutOfMemoryError)):
             raise
         torch.cuda.empty_cache()
         device = 'cpu'
