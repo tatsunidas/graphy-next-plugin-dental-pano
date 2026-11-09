@@ -50,11 +50,11 @@ export const DISCLAIMERS = {
   ja:
     "研究用の下書きです。診断・治療の判断に使わないでください。結果は誤りを含みます（検出漏れ・誤検出・番号の取り違え）。" +
     "「欠損」は、検出されなかった永久歯です。実際の欠損・補綴（インプラント・ブリッジ）・未萌出・乳歯・検出漏れを区別できません。" +
-    "面積・距離は出しません（パノラマの拡大率は位置で変わり、mm には直せません）。外部の施設での検証はしていません。",
+    "このプラグインは面積・距離を出しません（パノラマの拡大率は位置で変わり、mm には直せません）。画像に置いた輪郭に本体が表示する面積や平均値も参考にしないでください。外部の施設での検証はしていません。",
   en:
     "Research draft only. Do not use for diagnosis or treatment decisions. Results contain errors (missed or false detections, wrong tooth numbers). " +
     "\"Missing\" means a permanent tooth that was not detected; it cannot be told apart from true absence, prostheses (implants, bridges), unerupted teeth, deciduous teeth or a missed detection. " +
-    "No areas or distances are reported (panoramic magnification varies with position and cannot be converted to mm). Not validated at any external site.",
+    "This plugin reports no areas or distances (panoramic magnification varies with position and cannot be converted to mm); ignore the area and mean values the viewer shows on the placed outlines. Not validated at any external site.",
 };
 
 // ---------------------------------------------------------------------------
@@ -101,7 +101,8 @@ const S = {
     showTeeth: "歯の輪郭",
     showDx: "診断候補の枠",
     clear: "すべて消す",
-    placed: (n, f, x) => `輪郭 ${n} 件を置きました` + (f ? `（うち ${f} 件は形が不正で枠に置き換え）` : "") + (x ? `。${x} 件は置けませんでした` : ""),
+    noGeometry: "この画像には画素間隔（PixelSpacing など）が無く、本体が ROI を置けません。歯式チャートとレポートは使えます。",
+    placed: (n, f, x, why) => `輪郭 ${n} 件を置きました` + (f ? `（うち ${f} 件は形が不正で枠に置き換え）` : "") + (x ? `。${x} 件は置けませんでした（理由: ${why}）` : ""),
     teethTable: "歯",
     dxTable: "診断の候補",
     noDx: "診断モデルが入っていないので、診断の候補は出していません。",
@@ -171,7 +172,8 @@ const S = {
     showTeeth: "Tooth outlines",
     showDx: "Diagnosis boxes",
     clear: "Clear all",
-    placed: (n, f, x) => `Placed ${n} outlines` + (f ? ` (${f} replaced by boxes because the outline was invalid)` : "") + (x ? `; ${x} could not be placed` : ""),
+    noGeometry: "This image has no pixel spacing (PixelSpacing etc.), so the viewer cannot place ROIs. The dental chart and report still work.",
+    placed: (n, f, x, why) => `Placed ${n} outlines` + (f ? ` (${f} replaced by boxes because the outline was invalid)` : "") + (x ? `; ${x} could not be placed (reason: ${why})` : ""),
     teethTable: "Teeth",
     dxTable: "Diagnosis candidates",
     noDx: "No diagnosis model is installed, so no diagnosis candidates are shown.",
@@ -516,6 +518,9 @@ export function placeRois(host, tileId, kind, res) {
   /** @type {string[]} */
   const all = [];
   let fallback = 0, failed = 0;
+  /** @type {Record<string, number>} */
+  const reasons = {};
+  const fail = (/** @type {string} */ reason) => { failed++; reasons[reason] = (reasons[reason] ?? 0) + 1; return null; };
   const create = (/** @type {number[][]} */ verts, /** @type {string} */ label) => host.createRoi(tileId, { tool: "PolygonROI", verticesPx: verts, label });
   const place = (/** @type {number[][] | null} */ poly, /** @type {number[]} */ bbox, /** @type {string} */ label) => {
     for (const max of [64, 32, 16]) {
@@ -523,12 +528,11 @@ export function placeRois(host, tileId, kind, res) {
       if (!v) break;
       const r = create(v, label);
       if (r.ok) return r.roiUid;
-      if (r.reason !== "self-intersecting" && r.reason !== "degenerate") { failed++; return null; }
+      if (r.reason !== "self-intersecting" && r.reason !== "degenerate") return fail(r.reason);
     }
     const r = create(boxCorners(bbox), label);
     if (r.ok) { if (poly) fallback++; return r.roiUid; }
-    failed++;
-    return null;
+    return fail(r.reason);
   };
   if (kind === "teeth") {
     for (const t of res.teeth) {
@@ -541,7 +545,7 @@ export function placeRois(host, tileId, kind, res) {
       if (uid) all.push(uid);
     }
   }
-  return { uids, all, fallback, failed };
+  return { uids, all, fallback, failed, reasons };
 }
 
 // ---------------------------------------------------------------------------
@@ -1011,16 +1015,20 @@ export async function activate(host) {
     const apply = () => {
       removeRois("all");
       let fb = 0, failed = 0, n = 0;
+      /** @type {Record<string, number>} */
+      const why = {};
+      const addWhy = (/** @type {Record<string, number>} */ r) => { for (const [k, v] of Object.entries(r)) why[k] = (why[k] ?? 0) + v; };
       if (showTeeth.checked) {
         const p = placeRois(host, target.tileId, "teeth", res);
-        rois.teeth = p.uids; rois.tooth = p.all; fb += p.fallback; failed += p.failed; n += p.all.length;
+        rois.teeth = p.uids; rois.tooth = p.all; fb += p.fallback; failed += p.failed; n += p.all.length; addWhy(p.reasons);
       }
       if (showDx.checked) {
         const p = placeRois(host, target.tileId, "dx", res);
-        rois.dx = p.all; failed += p.failed; n += p.all.length;
+        rois.dx = p.all; failed += p.failed; n += p.all.length; addWhy(p.reasons);
       }
-      overlayMsg.textContent = n || failed ? s.placed(n, fb, failed) : "";
-      state.overlay = { placed: n, fallback: fb, failed };
+      const whyText = Object.entries(why).map(([k, v]) => `${k} ×${v}`).join(", ");
+      overlayMsg.textContent = (n || failed ? s.placed(n, fb, failed, whyText) : "") + (why["no-geometry"] ? " " + s.noGeometry : "");
+      state.overlay = { placed: n, fallback: fb, failed, reasons: why };
     };
     showTeeth.addEventListener("change", apply);
     showDx.addEventListener("change", apply);

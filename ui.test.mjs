@@ -199,6 +199,7 @@ test("placeRois: 多角形を置く。自己交差は粗くして再試行→そ
   assert.equal(p.uids.size, 2);
   assert.ok(p.uids.has(11) && p.uids.has(12) && !p.uids.has(13));
   assert.equal(p.failed, 1, "off-slice は再試行せず失敗に数える");
+  assert.deepEqual(p.reasons, { "off-slice": 1 }, "失敗の理由を集計して画面に出せる");
   assert.ok(calls.every((c) => c.tool === "PolygonROI" && c.verticesPx.every((v) => v.length === 2)));
   const d = placeRois(host, "t0", "dx", res);
   assert.equal(d.all.length, 1);
@@ -494,6 +495,20 @@ test("画面: 診断モデルが無い結果（dx: null）は歯と欠損だけ�
   assert.equal(calls.createRoi.length, 1);
   assert.match(q(w, "dp-report").value, /No diagnosis model was used/);
   assert.match(q(w, "dp-disclaimer").textContent, /Research draft only/);
+});
+
+test("画面（負例）: 本体が ROI を置けない（no-geometry）ときは、理由を説明し、チャートとレポートは出す", async () => {
+  const { w, host, calls } = mount();
+  host.createRoi = () => ({ ok: false, reason: "no-geometry" });
+  await activate(host);
+  q(w, "dp-run").click();
+  await until(() => q(w, "dp-result").style.display === "flex");
+  assert.match(q(w, "dp-overlay-msg").textContent, /置けませんでした.*no-geometry ×5/);
+  assert.match(q(w, "dp-overlay-msg").textContent, /画素間隔/);
+  assert.equal(w.document.querySelectorAll('[data-state="detected"]').length, 3);
+  assert.match(q(w, "dp-report").value, /検出した歯: 3 本/);
+  assert.equal(window.__dentalPanoState.overlay.placed, 0);
+  assert.equal(calls.createRoi.length, 0);
 });
 
 test("explain / failureText", () => {
