@@ -15,12 +15,14 @@
 export const PLUGIN_ID = "vis-dental-pano";
 
 /**
- * 重み。置き場は ~/.graphy-next/models/vis-dental-pano/。teeth は Kölüş & Güleç 2025（Mendeley Data、CC BY 4.0、doi:10.17632/83k2rtz4bc.1）の YOLO11x-seg そのまま。sha256 が空のものは版の固定が済んでいない（試作）。
- * dx は任意（無ければ歯と欠損歯だけを出す）。
+ * 重み。置き場は ~/.graphy-next/models/vis-dental-pano/。内容が sha256 と違えば止める。
+ * teeth: Kölüş & Güleç 2025（Mendeley Data、CC BY 4.0、doi:10.17632/83k2rtz4bc.1）の YOLO11x-seg を、DENTEX（CC BY 4.0）の歯 444 枚で fine-tune したもの
+ *   （バックボーン凍結・左右反転なし。optimizer 除去済み 125,015,124 B）。dental-pano-models の RESULTS.md 参照。
+ * dx: yolo26m を DENTEX の診断 494 枚で学習した 4 クラス検出（44,112,409 B）。任意（無ければ歯と欠損歯だけを出す）。
  */
 export const WEIGHTS = {
-  teeth: { file: "teeth-seg.pt", sha256: "2d0c07b878e9f9730eb845a901e85abf3535d49cf4034d2246592f76201ac8af", required: true, task: "seg" },
-  dx: { file: "dx-det.pt", sha256: "", required: false, task: "detect" },
+  teeth: { file: "teeth-seg.pt", sha256: "75dd697a133d1cf9474228e3ca2e5993722334ceffa4a68f23064bd6eb1a16d7", required: true, task: "seg" },
+  dx: { file: "dx-det.pt", sha256: "62a498a7c000a5462bf716d7b854bb3c5812d7dae8d173bc4a64309e12f4f4e8", required: false, task: "detect" },
 };
 /** 動作を確かめた ultralytics の版（空なら版は問わない） */
 export const ULTRALYTICS = "8.4.208";
