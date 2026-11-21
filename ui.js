@@ -41,11 +41,17 @@ export const PERMANENT = [...UPPER, ...LOWER];
 
 /** 診断の 4 クラス（DENTEX の diagnosis）。色は色覚多様性に配慮した 4 色（Okabe-Ito） */
 export const DX = {
-  caries: { ja: "う蝕", en: "Caries", color: "#E69F00" },
-  deep_caries: { ja: "深在性う蝕", en: "Deep caries", color: "#D55E00" },
-  periapical: { ja: "根尖病変", en: "Periapical lesion", color: "#CC79A7" },
-  impacted: { ja: "埋伏歯", en: "Impacted tooth", color: "#0072B2" },
+  caries: { ja: "う蝕", en: "Caries", color: "#E69F00",
+    tip: { ja: "う蝕（むし歯）の候補です。", en: "Candidate for caries (tooth decay)." } },
+  deep_caries: { ja: "深在性う蝕", en: "Deep caries", color: "#D55E00",
+    tip: { ja: "深在性う蝕の候補です。歯髄（歯の神経）の近くまで進んだ深いう蝕を指します。", en: "Candidate for deep caries: decay that has progressed close to the pulp (the nerve of the tooth)." } },
+  periapical: { ja: "根尖病変", en: "Periapical lesion", color: "#CC79A7",
+    tip: { ja: "根尖病変の候補です。歯根の先の周囲にできる病変を指します。学習データが少なく、結果は信頼できません。", en: "Candidate for a periapical lesion: a lesion around the root tip. There is very little training data, so this result is unreliable." } },
+  impacted: { ja: "埋伏歯", en: "Impacted tooth", color: "#0072B2",
+    tip: { ja: "埋伏歯の候補です。骨や歯肉に埋まって萌出していない歯（親知らずなど）を指します。", en: "Candidate for an impacted tooth: a tooth that has not erupted (for example a wisdom tooth)." } },
 };
+/** 診断の枠は歯単位（DENTEX の注釈の取り方）。tooltip に添える注意 */
+const DX_BOX_NOTE = { ja: "枠は歯単位で、病変の位置ではありません。", en: "The box marks the tooth, not the exact lesion location." };
 export const DX_KEYS = Object.keys(DX);
 
 export const DISCLAIMERS = {
@@ -133,6 +139,29 @@ const S = {
     rDropped: (n) => `形式が不正で捨てた検出: ${n} 件`,
     rModel: (r) => `モデル: ${r.model}`,
     rSummary: "まとめ",
+    tip: {
+      run: "選択中の画像 1 枚を、この PC の計算機（Python）で解析します。環境が未確認のときは、まず画像を送らない事前チェック（環境と重みの確認）があり、続けて本処理です。それぞれ同意画面が出ます。画像は PC の外へ出ません。",
+      recheck: "足りないものを入れたあとに押すと、本体を再起動せずに環境の確認をやり直します。",
+      envCopy: "下のコマンドをクリップボードにコピーします。このプラグインは環境を自動では書き換えません。入れるのは利用者です。",
+      chart: "FDI 方式の永久歯 32 本の表です。上段が上顎、下段が下顎で、図の左が患者の右です。実線の歯は検出、破線は検出されなかった歯です。",
+      cellDetected: (/** @type {number} */ fdi, /** @type {number} */ conf, /** @type {string[]} */ dx) =>
+        `FDI ${fdi}・検出（信頼度 ${conf.toFixed(2)}）` + (dx.length ? `・診断の候補: ${dx.join("、")}` : "") + "。押すと、画像上のこの歯の輪郭を選びます。",
+      cellMissing: (/** @type {number} */ fdi) => `FDI ${fdi}・検出されませんでした。欠損・補綴（インプラント・ブリッジ）・未萌出・乳歯・検出漏れのどれかは、区別できません。`,
+      overlays: "画像の上に、検出した歯の輪郭や診断候補の枠を重ねて表示します。チェックで出し入れできます。",
+      legend: "診断の色の凡例です。歯のマスの下の色の印が、その歯に診断の候補があることを示します。",
+      showTeeth: "検出した歯の輪郭を、画像に ROI として置きます。外すと消えます。本体が ROI に出す面積・平均値は、パノラマでは参考にしないでください。",
+      showDx: "診断候補の枠を、画像に ROI として置きます。外すと消えます。" + DX_BOX_NOTE.ja,
+      clear: "このプラグインが置いた ROI をすべて消します。画像にある他の ROI は消しません。",
+      dxTable: "診断候補の一覧です。種類・割り当てた歯・信頼度を出します。信頼度はモデルの出力値で、確率としては較正していません。",
+      dxRow: (/** @type {string} */ name, /** @type {number | null} */ fdi, /** @type {number} */ overlap, /** @type {number} */ conf) =>
+        `${name}の候補。` + (fdi != null ? `FDI ${fdi} に割り当て（診断の枠の ${Math.round(overlap * 100)}% がこの歯に入っています）` : "重なる歯が無く、歯に割り当てられませんでした") + `。信頼度 ${conf.toFixed(2)}。`,
+      report: "歯の本数・検出されなかった歯・診断候補を文章にした下書きです。欄は編集できません。［コピー］で取り出して使ってください。",
+      copy: "レポートの本文をクリップボードにコピーします。",
+      saveSr: "所見だけの DICOM SR（計測値は入れません）を、この検査に保存します。確認のダイアログが出ます。",
+      saveCsv: "歯と診断候補の一覧（枠の座標・信頼度・歯との重なり）を、CSV で保存します。",
+      publish: "検出した歯の数や診断候補などを、本体のレポート画面に解析結果の候補として登録します。",
+      meta: "計算に使った装置（cuda / cpu）・所要秒数・検出した歯の数・診断の件数・使った重みの版（ファイル名@sha256 の先頭 8 文字）です。",
+    },
     sep: "、",
   },
   en: {
@@ -203,9 +232,34 @@ const S = {
     rDropped: (n) => `Detections dropped for invalid format: ${n}`,
     rModel: (r) => `Model: ${r.model}`,
     rSummary: "Summary",
+    tip: {
+      run: "Analyses the selected image on this PC's compute endpoint (Python). When the environment has not been checked yet, a pre-check that sends no image (environment and weights) runs first, then the analysis. Each asks for your consent. The image never leaves this PC.",
+      recheck: "After installing what is missing, press this to re-run the environment check without restarting the app.",
+      envCopy: "Copies the command below to the clipboard. This plugin never changes your environment by itself; installing is up to you.",
+      chart: "A table of the 32 permanent teeth in FDI notation. Top row: maxilla; bottom row: mandible; the left of the chart is the patient's right. Solid cells were detected; dashed cells were not.",
+      cellDetected: (/** @type {number} */ fdi, /** @type {number} */ conf, /** @type {string[]} */ dx) =>
+        `FDI ${fdi} · detected (confidence ${conf.toFixed(2)})` + (dx.length ? ` · diagnosis candidates: ${dx.join(", ")}` : "") + ". Click to select this tooth's outline on the image.",
+      cellMissing: (/** @type {number} */ fdi) => `FDI ${fdi} · not detected. It cannot be told apart from true absence, a prosthesis (implant, bridge), an unerupted or deciduous tooth, or a missed detection.`,
+      overlays: "Draws the detected tooth outlines and the diagnosis boxes on top of the image. Use the checkboxes to show or hide them.",
+      legend: "Colour legend for diagnoses. A coloured mark under a tooth cell means this tooth has a diagnosis candidate.",
+      showTeeth: "Places the detected tooth outlines on the image as ROIs. Unchecking removes them. Do not rely on the area and mean values the viewer shows for ROIs on a panoramic image.",
+      showDx: "Places the diagnosis boxes on the image as ROIs. Unchecking removes them. " + DX_BOX_NOTE.en,
+      clear: "Removes every ROI this plugin placed. Other ROIs on the image are not touched.",
+      dxTable: "List of diagnosis candidates: type, assigned tooth and confidence. Confidence is the model's output value and is not calibrated as a probability.",
+      dxRow: (/** @type {string} */ name, /** @type {number | null} */ fdi, /** @type {number} */ overlap, /** @type {number} */ conf) =>
+        `Candidate for ${name}. ` + (fdi != null ? `Assigned to FDI ${fdi} (${Math.round(overlap * 100)}% of the diagnosis box lies inside this tooth)` : "No tooth overlaps it, so it was not assigned to a tooth") + `. Confidence ${conf.toFixed(2)}.`,
+      report: "A draft in words: number of detected teeth, teeth not detected and diagnosis candidates. The box is read-only; use [Copy] to take the text out.",
+      copy: "Copies the report text to the clipboard.",
+      saveSr: "Saves a DICOM SR with findings only (no measurements) to this study. A confirmation dialog opens.",
+      saveCsv: "Saves the list of teeth and diagnosis candidates (box coordinates, confidence, overlap with the tooth) as a CSV file.",
+      publish: "Registers the number of detected teeth, diagnosis candidates etc. on the viewer's report screen as a candidate analysis result.",
+      meta: "Device used for the computation (cuda / cpu), seconds, number of detected teeth, number of diagnoses, and the weight versions used (file name @ first 8 characters of the sha256).",
+    },
     sep: ", ",
   },
 };
+/** 文言の辞書（試験が ja / en の対応を検査する） */
+export const TEXT = S;
 
 /** @param {string | undefined} locale */
 export const langOf = (locale) => (/^ja/i.test(String(locale ?? "")) ? "ja" : "en");
@@ -455,6 +509,18 @@ export function chartModel(/** @type {ReturnType<typeof normalizeResult>} */ res
   return [...UPPER.map((f, i) => cell(f, i, "upper")), ...LOWER.map((f, i) => cell(f, i, "lower"))];
 }
 
+/** 診断の種類の説明（意味 + 枠は歯単位である注意） */
+export function dxTip(/** @type {string} */ key, /** @type {"ja"|"en"} */ lang) {
+  const d = /** @type {Record<string, any>} */ (DX)[key];
+  return `${d[lang]}: ${d.tip[lang]} ${DX_BOX_NOTE[lang]}`;
+}
+
+/** チャートの 1 マスの tooltip（検出 / 未検出） */
+export function cellTip(/** @type {ReturnType<typeof chartModel>[number]} */ c, /** @type {"ja"|"en"} */ lang) {
+  const t = S[lang].tip;
+  return c.detected ? t.cellDetected(c.fdi, c.conf ?? 0, c.dx.map((k) => /** @type {Record<string, any>} */ (DX)[k][lang])) : t.cellMissing(c.fdi);
+}
+
 export const CHART_SIZE = { width: CELL.left * 2 + 16 * (CELL.w + CELL.gap) + CELL.mid, height: CELL.top + CELL.h * 2 + CELL.rowGap + 36 };
 
 /**
@@ -473,11 +539,15 @@ export function renderChart(doc, model, lang, opts = {}) {
   const s = S[lang];
   const svg = mk("svg", { viewBox: `0 0 ${CHART_SIZE.width} ${CHART_SIZE.height}`, width: "100%", role: "img", "data-testid": "dental-chart" });
   svg.setAttribute("style", "background:#fff;border-radius:4px;max-width:720px");
+  /** 標準の tooltip（SVG は子要素 <title>） */
+  const withTip = (/** @type {Element} */ node, /** @type {string} */ text) => { node.append(mk("title", {}, text)); return node; };
+  svg.append(mk("title", {}, s.tip.chart));
   svg.append(mk("text", { x: CELL.left, y: 14, "font-size": 11, fill: "#444" }, s.right));
   svg.append(mk("text", { x: CHART_SIZE.width - CELL.left, y: 14, "font-size": 11, fill: "#444", "text-anchor": "end" }, s.left));
   svg.append(mk("line", { x1: CHART_SIZE.width / 2, x2: CHART_SIZE.width / 2, y1: 20, y2: CHART_SIZE.height - 30, stroke: "#bbb", "stroke-width": 1 }));
   for (const c of model) {
     const g = mk("g", { "data-testid": `fdi-${c.fdi}`, "data-state": c.detected ? "detected" : "missing", "data-dx": c.dx.join(" "), style: c.detected ? "cursor:pointer" : "" });
+    g.append(mk("title", {}, cellTip(c, lang)));
     const sel = opts.selected === c.fdi;
     g.append(mk("rect", c.detected
       ? { x: c.x, y: c.y, width: CELL.w, height: CELL.h, rx: 8, fill: "#f4f1ea", stroke: sel ? "#FF6900" : "#8a8578", "stroke-width": sel ? 3 : 1.2 }
@@ -486,7 +556,7 @@ export function renderChart(doc, model, lang, opts = {}) {
     if (!c.detected) g.append(mk("text", { x: c.x + CELL.w / 2, y: c.y + CELL.h + 12, "font-size": 9, "text-anchor": "middle", fill: "#888" }, String(c.fdi)));
     c.dx.forEach((k, i) => {
       const bw = (CELL.w - 8) / c.dx.length;
-      g.append(mk("rect", { x: c.x + 4 + i * bw, y: c.y + CELL.h - 12, width: bw - 1, height: 8, rx: 2, fill: DX[/** @type {keyof typeof DX} */ (k)].color, "data-dx-key": k }));
+      g.append(withTip(mk("rect", { x: c.x + 4 + i * bw, y: c.y + CELL.h - 12, width: bw - 1, height: 8, rx: 2, fill: DX[/** @type {keyof typeof DX} */ (k)].color, "data-dx-key": k }), dxTip(k, lang)));
     });
     if (c.detected && opts.onSelect) g.addEventListener("click", () => /** @type {(f:number)=>void} */ (opts.onSelect)(c.fdi));
     svg.append(g);
@@ -497,9 +567,12 @@ export function renderChart(doc, model, lang, opts = {}) {
   let lx = CELL.left + 60;
   const ly = CHART_SIZE.height - 10;
   for (const k of DX_KEYS) {
-    svg.append(mk("rect", { x: lx, y: ly - 8, width: 10, height: 8, rx: 2, fill: DX[/** @type {keyof typeof DX} */ (k)].color }));
     const label = DX[/** @type {keyof typeof DX} */ (k)][lang];
-    svg.append(mk("text", { x: lx + 14, y: ly, "font-size": 10, fill: "#444" }, label));
+    const item = mk("g", { "data-testid": `legend-${k}` });
+    item.append(mk("title", {}, dxTip(k, lang) + " " + s.tip.legend));
+    item.append(mk("rect", { x: lx, y: ly - 8, width: 10, height: 8, rx: 2, fill: DX[/** @type {keyof typeof DX} */ (k)].color }));
+    item.append(mk("text", { x: lx + 14, y: ly, "font-size": 10, fill: "#444" }, label));
+    svg.append(item);
     lx += 22 + label.length * (lang === "ja" ? 10 : 6);
   }
   return svg;
@@ -560,6 +633,11 @@ import json, os, sys, time, hashlib, re
 from importlib import metadata as _md
 
 T0 = time.time()
+SEP = ' \u2016 '  # 失敗理由は「日本語 ‖ English」。画面が言語を選ぶ
+
+
+def bi(ja, en):
+    return ja + SEP + en
 
 
 def stage(name, p):
@@ -583,13 +661,17 @@ def env_problem(installed, need):
     """入っていない・版が違うパッケージがあれば理由（先頭が missing-packages: / unsupported-version:）。無ければ None"""
     missing = [d for d in need if installed.get(d) is None]
     if missing:
-        return 'missing-packages: この計算機に ' + ' '.join(missing) + ' を入れてください（pip install ' + ' '.join(
-            d + ('==' + need[d] if need[d] else '') for d in missing) + '）'
+        cmd = 'pip install ' + ' '.join(d + ('==' + need[d] if need[d] else '') for d in missing)
+        return 'missing-packages: ' + bi('この計算機に ' + ' '.join(missing) + ' を入れてください（' + cmd + '）',
+                                          'Install ' + ' '.join(missing) + ' on this compute endpoint (' + cmd + ')')
     bad = [d for d, want in need.items() if want and installed[d].split('+')[0] != want]
     if bad:
-        return 'unsupported-version: ' + '、'.join(
-            d + ' ' + installed[d] + '（動作を確かめた版は ' + need[d] + '）' for d in bad
-        ) + '。環境を書き換えないので、専用の環境で pip install ' + ' '.join(d + '==' + need[d] for d in bad) + ' を入れてください'
+        cmd = 'pip install ' + ' '.join(d + '==' + need[d] for d in bad)
+        return 'unsupported-version: ' + bi(
+            '、'.join(d + ' ' + installed[d] + '（動作を確かめた版は ' + need[d] + '）' for d in bad)
+            + '。環境を書き換えないので、専用の環境で ' + cmd + ' を入れてください',
+            ', '.join(d + ' ' + installed[d] + ' (tested with ' + need[d] + ')' for d in bad)
+            + '. This plugin does not change your environment; in a dedicated environment run: ' + cmd)
     return None
 
 
@@ -640,9 +722,11 @@ def weights_state():
 def weights_problem(state):
     for key, s in state.items():
         if s['required'] and not s['exists']:
-            return 'missing-weights: 重み ' + s['file'] + ' がありません。' + s['path'] + ' に置いてください'
+            return 'missing-weights: ' + bi('重み ' + s['file'] + ' がありません。' + s['path'] + ' に置いてください',
+                                            'The weight file ' + s['file'] + ' is missing. Place it at ' + s['path'])
         if s['exists'] and s['match'] is False:
-            return 'bad-weights: ' + s['file'] + ' の内容が固定した版と違います（sha256 不一致）。置き直してください'
+            return 'bad-weights: ' + bi(s['file'] + ' の内容が固定した版と違います（sha256 不一致）。置き直してください',
+                                        s['file'] + ' does not match the pinned version (sha256 mismatch). Please replace it.')
     return None
 
 
@@ -652,10 +736,12 @@ def load_image(path):
     z = np.load(path)
     meta = json.loads(bytes(z['meta.json']))
     if meta.get('modality') not in ('PX', 'DX', 'CR'):
-        raise RuntimeError('not-applicable: パノラマ X 線（PX / DX / CR）の 1 枚だけに使えます（このシリーズは ' + str(meta.get('modality')) + '）')
+        raise RuntimeError('not-applicable: ' + bi('パノラマ X 線（PX / DX / CR）の 1 枚だけに使えます（このシリーズは ' + str(meta.get('modality')) + '）',
+                                                    'Only a single panoramic radiograph (PX / DX / CR) is supported (this series is ' + str(meta.get('modality')) + ')'))
     vol = z['volume']
     if vol.ndim != 3 or vol.shape[0] != 1:
-        raise RuntimeError('not-applicable: 1 枚の画像だけに使えます（このシリーズは ' + str(vol.shape[0]) + ' 枚・多フレームを含む）')
+        raise RuntimeError('not-applicable: ' + bi('1 枚の画像だけに使えます（このシリーズは ' + str(vol.shape[0]) + ' 枚・多フレームを含む）',
+                                                    'A single image only (this series has ' + str(vol.shape[0]) + ' images / is multi-frame)'))
     a = vol[0].astype(np.float32)
     wc, ww = meta.get('windowCenter'), meta.get('windowWidth')
     func = meta.get('voiLutFunction') or 'LINEAR'
@@ -665,7 +751,7 @@ def load_image(path):
         c, w = float(wc[0]), float(ww[0])
         lo, hi, window = c - 0.5 - (w - 1) / 2, c - 0.5 + (w - 1) / 2, 'dicom'
     if not hi > lo:
-        raise RuntimeError('not-applicable: 画素値が一定で、画像として使えません')
+        raise RuntimeError('not-applicable: ' + bi('画素値が一定で、画像として使えません', 'The pixel values are constant, so this cannot be used as an image'))
     y = np.clip((a - lo) / (hi - lo), 0.0, 1.0)
     if meta.get('photometricInterpretation') == 'MONOCHROME1':
         y = 1.0 - y
@@ -734,7 +820,8 @@ valid = {int(f) for f in GRAPHY['permanent']}
 
 tm = YOLO(wstate['teeth']['path'])
 if tm.task != 'segment':
-    raise RuntimeError('unsupported-model: 歯の重みはセグメンテーション（segment）のモデルです（この重みは ' + str(tm.task) + '）')
+    raise RuntimeError('unsupported-model: ' + bi('歯の重みはセグメンテーション（segment）のモデルです（この重みは ' + str(tm.task) + '）',
+                                                  'The teeth weights must be a segmentation (segment) model (this one is ' + str(tm.task) + ')'))
 stage('teeth-model', 0.3)
 r = predict(tm, conf=GRAPHY['conf']['teeth'], iou=0.5, retina_masks=True, max_det=64)
 teeth, skipped = [], []
@@ -748,20 +835,23 @@ for i, b in enumerate(r.boxes):
     teeth.append({'fdi': fdi, 'conf': round(float(b.conf[0]), 4), 'bbox': [round(float(v), 1) for v in b.xyxy[0].tolist()],
                   'poly': [[round(float(x), 1), round(float(y), 1)] for x, y in xy] if xy is not None and len(xy) >= 3 else None})
 if skipped and not teeth:
-    raise RuntimeError('unsupported-model: 歯のクラス名から FDI を読めません: ' + ', '.join(sorted(set(skipped))[:6]))
+    names = ', '.join(sorted(set(skipped))[:6])
+    raise RuntimeError('unsupported-model: ' + bi('歯のクラス名から FDI を読めません: ' + names, 'Cannot read FDI numbers from the tooth class names: ' + names))
 stage('teeth', 0.6)
 
 dx = None
 if wstate['dx']['exists']:
     dm = YOLO(wstate['dx']['path'])
     if dm.task != 'detect':
-        raise RuntimeError('unsupported-model: 診断の重みは検出（detect）のモデルです（この重みは ' + str(dm.task) + '）')
+        raise RuntimeError('unsupported-model: ' + bi('診断の重みは検出（detect）のモデルです（この重みは ' + str(dm.task) + '）',
+                                                      'The diagnosis weights must be a detection (detect) model (this one is ' + str(dm.task) + ')'))
     dr = predict(dm, conf=GRAPHY['conf']['dx'], iou=0.5, max_det=100)
     dx = []
     for b in dr.boxes:
         key = dx_key(dr.names[int(b.cls[0])])
         if key is None:
-            raise RuntimeError('unsupported-model: 診断のクラス名を解釈できません: ' + str(dr.names[int(b.cls[0])]))
+            cname = str(dr.names[int(b.cls[0])])
+            raise RuntimeError('unsupported-model: ' + bi('診断のクラス名を解釈できません: ' + cname, 'Cannot interpret the diagnosis class name: ' + cname))
         dx.append({'cls': key, 'conf': round(float(b.conf[0]), 4), 'bbox': [round(float(v), 1) for v in b.xyxy[0].tolist()]})
 stage('dx', 0.9)
 
@@ -791,7 +881,7 @@ if installed['torch']:
         torch_error = type(e).__name__ + ': ' + str(e)[:200]
 problem = env_problem(installed, need)
 if problem is None and torch_error:
-    problem = 'broken-package: torch を読み込めません（' + torch_error + '）。入れ直してください'
+    problem = 'broken-package: ' + bi('torch を読み込めません（' + torch_error + '）。入れ直してください', 'Cannot load torch (' + torch_error + '). Please reinstall it.')
 wstate = weights_state()
 if problem is None:
     problem = weights_problem(wstate)
@@ -835,15 +925,17 @@ export function installCommand(/** @type {string} */ python, /** @type {Record<s
 
 /** 本体がデータを作らなかった・送らなかった理由（よく出るものだけ）。 */
 const REFUSALS = {
-  "burnin-risky-modality": "この本体は、この種類の X 線を計算機へ渡せません。この PC の計算機（local）を使えるようにしてください",
-  "dataset-local-only": "この画像はこの PC の計算機にしか渡せません（外部の計算機は選べません）",
-  "npz-too-large": "画像が大きすぎます",
-  "permission-denied": "このプラグインに計算機を使う許可がありません",
-  "no-endpoint": "環境設定 ＞ 外部の計算機 で、この PC の計算機（local）を使えるようにしてください",
-  "local-unavailable": "この PC の計算機を使えません（Python・jupyter_server・ipykernel が揃っていません）",
+  "burnin-risky-modality": { ja: "この本体は、この種類の X 線を計算機へ渡せません。この PC の計算機（local）を使えるようにしてください", en: "The viewer cannot send this kind of radiograph to a compute endpoint. Enable this PC's compute endpoint (local)." },
+  "dataset-local-only": { ja: "この画像はこの PC の計算機にしか渡せません（外部の計算機は選べません）", en: "This image can only be sent to this PC's compute endpoint (external endpoints cannot be chosen)." },
+  "npz-too-large": { ja: "画像が大きすぎます", en: "The image is too large." },
+  "permission-denied": { ja: "このプラグインに計算機を使う許可がありません", en: "This plugin is not permitted to use a compute endpoint." },
+  "no-endpoint": { ja: "環境設定 ＞ 外部の計算機 で、この PC の計算機（local）を使えるようにしてください", en: "In Preferences > External compute, enable this PC's compute endpoint (local)." },
+  "local-unavailable": { ja: "この PC の計算機を使えません（Python・jupyter_server・ipykernel が揃っていません）", en: "This PC's compute endpoint is unavailable (Python, jupyter_server and ipykernel are not all installed)." },
 };
-export const explain = (/** @type {string | undefined} */ code) =>
-  code && /** @type {Record<string,string>} */ (REFUSALS)[code] ? `${/** @type {Record<string,string>} */ (REFUSALS)[code]}（${code}）` : String(code);
+export const explain = (/** @type {string | undefined} */ code, /** @type {"ja"|"en"} */ lang = "ja") => {
+  const r = code ? /** @type {Record<string,{ja:string,en:string}>} */ (REFUSALS)[code] : undefined;
+  return r ? `${r[lang]}${lang === "ja" ? "（" : " ("}${code}${lang === "ja" ? "）" : ")"}` : String(code);
+};
 
 /** 対象のタイルを使えるか。使えなければ理由を返す。 */
 export function targetProblem(/** @type {any} */ t) {
@@ -855,11 +947,16 @@ export function targetProblem(/** @type {any} */ t) {
   return null;
 }
 
-/** 計算機の失敗（errorName: errorValue）を、画面に出す文にする。 */
-export function failureText(/** @type {string | undefined} */ value) {
+/** 計算機（Python）の失敗理由は「日本語 ‖ English」の 1 文字列で返る。この区切りで分けて、画面の言語の側を返す。 */
+export const LANG_SEP = " ‖ ";
+
+/** 計算機の失敗（errorName: errorValue）を、画面に出す文にする。区切りが無ければ全体を返す。 */
+export function failureText(/** @type {string | undefined} */ value, /** @type {"ja"|"en"} */ lang = "ja") {
   const v = String(value ?? "");
-  const m = /^(missing-packages|unsupported-version|not-applicable|missing-weights|bad-weights|unsupported-model): ?(.*)$/s.exec(v);
-  return m ? m[2] : `失敗 / Failed: ${v}`;
+  const m = /^(missing-packages|unsupported-version|not-applicable|missing-weights|bad-weights|unsupported-model|broken-package): ?(.*)$/s.exec(v);
+  if (!m) return `失敗 / Failed: ${v}`;
+  const parts = m[2].split(LANG_SEP);
+  return parts.length === 2 ? parts[lang === "ja" ? 0 : 1] : m[2];
 }
 
 // ---------------------------------------------------------------------------
@@ -898,7 +995,7 @@ export async function activate(host) {
 
   const banner = el("div", { testid: "dp-disclaimer", textContent: "⚠ " + DISCLAIMERS[lang], style: BANNER_STYLE });
   const about = el("div", { testid: "dp-about", style: "font-size: 12px; opacity: 0.85; line-height: 1.5", textContent: s.about });
-  const runBtn = el("button", { textContent: s.run, testid: "dp-run", style: "align-self: flex-start; padding: 4px 18px" });
+  const runBtn = el("button", { textContent: s.run, title: s.tip.run, testid: "dp-run", style: "align-self: flex-start; padding: 4px 18px" });
   const status = el("div", { testid: "dp-status", style: "min-height: 1.4em; opacity: 0.9" });
   const result = el("div", { testid: "dp-result", style: "display: none; flex-direction: column; gap: 10px" });
   const envBox = el("div", { testid: "dp-env", style: `display: none; flex-direction: column; gap: 6px; ${BANNER_STYLE}` });
@@ -933,7 +1030,7 @@ export async function activate(host) {
         el("span", { style: "width: 110px" }, want ? "== " + want : s.envAnyVersion),
         el("span", {}, v == null ? s.envMissing : ok ? "✓ " + v : "✗ " + v + s.envWrongVersion)));
     }
-    if (env.problem && /^(broken-package|missing-weights|bad-weights)/.test(env.problem)) kids.push(el("div", { testid: "dp-env-problem", style: "font-size: 12px; word-break: break-all" }, failureText(env.problem)));
+    if (env.problem && /^(broken-package|missing-weights|bad-weights)/.test(env.problem)) kids.push(el("div", { testid: "dp-env-problem", style: "font-size: 12px; word-break: break-all" }, failureText(env.problem, lang)));
     for (const w of Object.values(/** @type {Record<string, any>} */ (env.weights ?? {}))) {
       if (w.exists) continue;
       kids.push(el("div", { style: "font-size: 12px; word-break: break-all" }, `${s.weightsTitle}: ${w.file}${w.required ? "" : " " + s.weightsOptional}`, el("br"), env.weightsDir));
@@ -941,11 +1038,11 @@ export async function activate(host) {
     const cmd = installCommand(env.python, env.installed, env.need);
     if (cmd) {
       const area = el("textarea", { value: cmd, readOnly: true, rows: 3, testid: "dp-env-command", style: "width: 100%; box-sizing: border-box; font: 12px ui-monospace, monospace" });
-      const copy = el("button", { textContent: s.envCopy, testid: "dp-env-copy", style: "font-size: 11px" });
+      const copy = el("button", { textContent: s.envCopy, title: s.tip.envCopy, testid: "dp-env-copy", style: "font-size: 11px" });
       copy.addEventListener("click", () => { void navigator.clipboard?.writeText(cmd); });
       kids.push(el("div", { style: "font-size: 12px" }, s.envHow), area, copy, el("div", { style: "font-size: 11px; opacity: 0.85; line-height: 1.5" }, s.envGpu));
     }
-    const again = el("button", { textContent: s.envRecheck, testid: "dp-env-recheck", style: "align-self: flex-start; padding: 2px 14px" });
+    const again = el("button", { textContent: s.envRecheck, title: s.tip.recheck, testid: "dp-env-recheck", style: "align-self: flex-start; padding: 2px 14px" });
     again.addEventListener("click", async () => {
       again.disabled = true;
       if (await checkEnv()) setStatus(s.envReady);
@@ -962,12 +1059,12 @@ export async function activate(host) {
     const r = await host.compute.runJob({ endpointId: "local", inputs: [], script: buildProbeScript(), timeoutSec: 600 }, { onProgress });
     if (!r.ok) {
       state.error = r.error;
-      setStatus(r.cancelled ? s.cancelled : explain(r.error));
+      setStatus(r.cancelled ? s.cancelled : explain(r.error, lang));
       return false;
     }
     if (r.status !== "ok") {
       state.error = `${r.errorName}: ${r.errorValue}`;
-      setStatus(failureText(r.errorValue));
+      setStatus(failureText(r.errorValue, lang));
       return false;
     }
     const raw = await r.readFile("env.json");
@@ -1011,9 +1108,9 @@ export async function activate(host) {
     drawChart();
 
     const overlayMsg = el("div", { testid: "dp-overlay-msg", style: "font-size: 12px; opacity: 0.85" });
-    const showTeeth = el("input", { type: "checkbox", testid: "dp-show-teeth", checked: true });
-    const showDx = el("input", { type: "checkbox", testid: "dp-show-dx", checked: res.dx !== null && res.dx.length > 0, disabled: !res.dx?.length });
-    const clearBtn = el("button", { textContent: s.clear, testid: "dp-clear", style: "font-size: 11px" });
+    const showTeeth = el("input", { type: "checkbox", title: s.tip.showTeeth, testid: "dp-show-teeth", checked: true });
+    const showDx = el("input", { type: "checkbox", title: s.tip.showDx, testid: "dp-show-dx", checked: res.dx !== null && res.dx.length > 0, disabled: !res.dx?.length });
+    const clearBtn = el("button", { textContent: s.clear, title: s.tip.clear, testid: "dp-clear", style: "font-size: 11px" });
     const apply = () => {
       removeRois("all");
       let fb = 0, failed = 0, n = 0;
@@ -1040,7 +1137,7 @@ export async function activate(host) {
     if (res.dx === null) tableRows.push(el("div", { testid: "dp-no-dx", style: "font-size: 12px" }, s.noDx));
     else if (!res.dx.length) tableRows.push(el("div", { testid: "dp-no-dx-found", style: "font-size: 12px" }, s.noDxFound));
     else for (const d of [...res.dx].sort((a, b) => (a.fdi ?? 99) - (b.fdi ?? 99))) {
-      tableRows.push(el("div", { testid: "dp-dx-row", style: "display: flex; gap: 8px; align-items: center; font-size: 12px" },
+      tableRows.push(el("div", { testid: "dp-dx-row", title: s.tip.dxRow(DX[/** @type {keyof typeof DX} */ (d.cls)][lang], d.fdi, d.overlap, d.conf), style: "display: flex; gap: 8px; align-items: center; font-size: 12px" },
         el("span", { style: `display:inline-block;width:10px;height:10px;border-radius:2px;background:${DX[/** @type {keyof typeof DX} */ (d.cls)].color}` }),
         el("span", { style: "width: 120px" }, DX[/** @type {keyof typeof DX} */ (d.cls)][lang]),
         el("span", { style: "width: 70px" }, d.fdi != null ? `FDI ${d.fdi}` : s.unassigned),
@@ -1048,12 +1145,12 @@ export async function activate(host) {
     }
 
     const reportText = buildReport(res, lang);
-    const reportArea = el("textarea", { value: reportText, readOnly: true, rows: 12, testid: "dp-report", style: "width: 100%; box-sizing: border-box; font: 13px system-ui, sans-serif" });
-    const copyBtn = el("button", { textContent: s.copy, testid: "dp-copy", style: "font-size: 11px" });
+    const reportArea = el("textarea", { value: reportText, readOnly: true, rows: 12, title: s.tip.report, testid: "dp-report", style: "width: 100%; box-sizing: border-box; font: 13px system-ui, sans-serif" });
+    const copyBtn = el("button", { textContent: s.copy, title: s.tip.copy, testid: "dp-copy", style: "font-size: 11px" });
     copyBtn.addEventListener("click", () => { void navigator.clipboard?.writeText(reportText); });
-    const srBtn = el("button", { textContent: s.saveSr, testid: "dp-save-sr" });
-    const csvBtn = el("button", { textContent: s.saveCsv, testid: "dp-save-csv" });
-    const pubBtn = el("button", { textContent: s.publish, testid: "dp-publish" });
+    const srBtn = el("button", { textContent: s.saveSr, title: s.tip.saveSr, testid: "dp-save-sr" });
+    const csvBtn = el("button", { textContent: s.saveCsv, title: s.tip.saveCsv, testid: "dp-save-csv" });
+    const pubBtn = el("button", { textContent: s.publish, title: s.tip.publish, testid: "dp-publish" });
     srBtn.addEventListener("click", async () => {
       const r = await host.saveStructuredReport(target.tileId, buildSrRequest(res, lang));
       state.sr = r;
@@ -1071,17 +1168,17 @@ export async function activate(host) {
     });
 
     result.replaceChildren(
-      el("div", { style: "font-weight: 600" }, s.chart),
+      el("div", { style: "font-weight: 600", title: s.tip.chart, testid: "dp-chart-title" }, s.chart),
       chartHost,
       el("div", { style: "display: flex; gap: 12px; align-items: center; flex-wrap: wrap" },
-        el("span", { style: "font-weight: 600" }, s.overlays),
-        el("label", {}, showTeeth, " " + s.showTeeth), el("label", {}, showDx, " " + s.showDx), clearBtn),
+        el("span", { style: "font-weight: 600", title: s.tip.overlays, testid: "dp-overlays-title" }, s.overlays),
+        el("label", { title: s.tip.showTeeth }, showTeeth, " " + s.showTeeth), el("label", { title: s.tip.showDx }, showDx, " " + s.showDx), clearBtn),
       overlayMsg,
-      el("div", { style: "font-weight: 600" }, s.dxTable), ...tableRows,
-      el("div", { style: "display: flex; gap: 8px; align-items: center; font-weight: 600" }, s.report, copyBtn),
+      el("div", { style: "font-weight: 600", title: s.tip.dxTable, testid: "dp-dx-title" }, s.dxTable), ...tableRows,
+      el("div", { style: "display: flex; gap: 8px; align-items: center; font-weight: 600" }, el("span", { title: s.tip.report, testid: "dp-report-title" }, s.report), copyBtn),
       reportArea,
       el("div", { style: "display: flex; gap: 8px; flex-wrap: wrap" }, srBtn, csvBtn, pubBtn),
-      el("div", { testid: "dp-meta", style: "font-size: 11px; opacity: 0.75" }, s.meta(res), " ", res.model),
+      el("div", { testid: "dp-meta", title: s.tip.meta, style: "font-size: 11px; opacity: 0.75" }, s.meta(res), " ", res.model),
     );
     result.style.display = "flex";
     apply();
@@ -1106,7 +1203,7 @@ export async function activate(host) {
     }, { onProgress });
     if (!r.ok) {
       state.phase = "failed"; state.error = r.error;
-      setStatus(r.cancelled ? s.cancelled : explain(r.error));
+      setStatus(r.cancelled ? s.cancelled : explain(r.error, lang));
       runBtn.disabled = false;
       return;
     }
@@ -1114,7 +1211,7 @@ export async function activate(host) {
       state.phase = "failed"; state.error = `${r.errorName}: ${r.errorValue}`; state.stderr = r.stderr;
       const envLost = /^(missing-packages|unsupported-version|missing-weights|bad-weights): /.test(String(r.errorValue));
       if (envLost) envOk = false; // 確認のあとで環境が変わった。次の「実行」でもう一度確かめて手順を出す
-      setStatus(failureText(r.errorValue));
+      setStatus(failureText(r.errorValue, lang));
       runBtn.disabled = false;
       return;
     }

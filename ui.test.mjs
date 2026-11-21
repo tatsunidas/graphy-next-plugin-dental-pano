@@ -10,7 +10,7 @@ import { test } from "node:test";
 import { JSDOM } from "jsdom";
 
 import {
-  CELL, DX, LOWER, PERMANENT, PY, PY_PREP, PY_PROBE, UPPER, activate, assignDiagnoses, boxCorners, buildAnalysisResult, buildCsv, buildProbeScript,
+  CELL, DX, LANG_SEP, LOWER, PERMANENT, PY, PY_PREP, PY_PROBE, TEXT, UPPER, activate, cellTip, dxTip, assignDiagnoses, boxCorners, buildAnalysisResult, buildCsv, buildProbeScript,
   buildReport, buildScript, buildSrRequest, chartModel, diagnosisByClass, explain, failureText, installCommand, intersectionArea, missingTeeth,
   normalizeResult, placeRois, renderChart, simplifyPolygon, targetProblem,
 } from "./ui.js";
@@ -531,4 +531,149 @@ test("PY の本処理は ultralytics の API を想定どおりに呼ぶ（呼�
   assert.match(PY, /unable to find an engine/);
   assert.match(PY, /cuda_usable\(torch\)/);
   assert.match(PY_PROBE, /weights_state\(\)/);
+});
+
+
+// ---------------------------------------------------------------------------
+// tooltip（各機能の補足）と、失敗理由の英日対応
+// ---------------------------------------------------------------------------
+
+const JA = /[\u3040-\u30ff\u4e00-\u9fff]/;
+
+/** 空でない title を持たない部品の testid（無ければ []） */
+function untitled(root, ids) {
+  return ids.filter((id) => {
+    const els = [...root.querySelectorAll(`[data-testid="${id}"]`)];
+    return !els.length || els.some((e) => !(e.getAttribute("title") ?? "").trim());
+  });
+}
+
+const TIP_IDS = ["dp-run", "dp-chart-title", "dp-overlays-title", "dp-show-teeth", "dp-show-dx", "dp-clear", "dp-dx-title", "dp-dx-row",
+  "dp-report-title", "dp-report", "dp-copy", "dp-save-sr", "dp-save-csv", "dp-publish", "dp-meta"];
+
+test("tooltip の辞書: ja と en のキーが一致し、すべて空でない。ja は日本語・en は英語だけ（片方の足し忘れで落ちる）", () => {
+  assert.deepEqual(Object.keys(TEXT.ja.tip).sort(), Object.keys(TEXT.en.tip).sort());
+  for (const lang of ["ja", "en"]) {
+    for (const [k, v] of Object.entries(TEXT[lang].tip)) {
+      const text = typeof v === "function" ? (k === "cellDetected" ? v(16, 0.9, ["x"]) : k === "cellMissing" ? v(16) : v("x", 16, 0.8, 0.9)) : v;
+      assert.ok(String(text).trim().length > 10, `${lang}.${k} が空に近い`);
+      if (lang === "ja") assert.ok(JA.test(text), `ja.${k} に日本語が無い: ${text}`);
+      else assert.ok(!JA.test(text), `en.${k} に日本語が混ざる: ${text}`);
+    }
+  }
+  for (const k of Object.keys(DX)) {
+    assert.ok(DX[k].tip.ja.length > 5 && DX[k].tip.en.length > 5);
+    assert.ok(!JA.test(dxTip(k, "en")), `dxTip(${k}, en) に日本語が混ざる`);
+    assert.match(dxTip(k, "ja"), /歯単位/);
+    assert.match(dxTip(k, "en"), /tooth, not the exact lesion/);
+  }
+});
+
+test("tooltip（画面）: 結果の画面の操作部品・見出し・診断の行・ラベルが、ja・en とも空でない title を持つ。日本語と英語が混ざらない", async () => {
+  for (const locale of ["ja-JP", "en-US"]) {
+    const { w, host } = mount({ locale });
+    await activate(host);
+    q(w, "dp-run").click();
+    await until(() => q(w, "dp-result").style.display === "flex");
+    assert.deepEqual(untitled(w.document, TIP_IDS), [], `${locale}: title が無い部品`);
+    assert.equal(w.document.querySelectorAll('[data-testid="dp-dx-row"]').length, 2);
+    for (const l of w.document.querySelectorAll("label")) assert.ok(l.title.trim(), "チェックのラベルにも title");
+    const all = [...w.document.querySelectorAll("[title]")].map((e) => e.getAttribute("title"));
+    // 固定の試験データ（診断 2 件）の内訳 18: 実行・チェック 2・ラベル 2・消す・見出し 4（チャート・重ね表示・診断・レポート）・診断の行 2・レポート欄・コピー・SR・CSV・送る・meta
+    assert.equal(all.length, 18, `title の数: ${all.length}`);
+    if (locale === "en-US") assert.ok(all.every((t) => !JA.test(t)), "英語の画面の title に日本語が混ざる: " + all.find((t) => JA.test(t)));
+    else assert.ok(all.every((t) => JA.test(t)), "日本語の画面の title に日本語が無いものがある: " + all.find((t) => !JA.test(t)));
+  }
+});
+
+test("tooltip（負例）: title を 1 つ外すと検査が落ちる（検査器が効いている）", async () => {
+  const { w, host } = mount();
+  await activate(host);
+  q(w, "dp-run").click();
+  await until(() => q(w, "dp-result").style.display === "flex");
+  assert.deepEqual(untitled(w.document, TIP_IDS), []);
+  q(w, "dp-save-sr").removeAttribute("title");
+  assert.deepEqual(untitled(w.document, TIP_IDS), ["dp-save-sr"]);
+  q(w, "dp-save-sr").setAttribute("title", "   ");
+  assert.deepEqual(untitled(w.document, TIP_IDS), ["dp-save-sr"], "空白だけの title も落とす");
+  assert.deepEqual(untitled(w.document, ["dp-no-such-control"]), ["dp-no-such-control"], "部品が無いことも落とす");
+});
+
+test("tooltip（チャート）: 32 マスすべてに <title>。検出は FDI・信頼度・診断の種類、未検出は区別できない旨。印・凡例にも", async () => {
+  for (const [locale, lang] of [["ja-JP", "ja"], ["en-US", "en"]]) {
+    const { w, host } = mount({ locale });
+    await activate(host);
+    q(w, "dp-run").click();
+    await until(() => q(w, "dp-result").style.display === "flex");
+    const cells = [...w.document.querySelectorAll('[data-testid^="fdi-"]')];
+    assert.equal(cells.length, 32);
+    for (const c of cells) assert.ok(c.querySelector(":scope > title")?.textContent.trim(), `${c.dataset.testid} に <title> が無い`);
+    const t16 = q(w, "fdi-16").querySelector(":scope > title").textContent;
+    assert.match(t16, /FDI 16/);
+    assert.match(t16, /0\.90/);
+    assert.ok(t16.includes(DX.caries[lang]), "診断の種類が入る: " + t16);
+    const t11 = q(w, "fdi-11").querySelector(":scope > title").textContent;
+    assert.match(t11, lang === "ja" ? /区別できません/ : /cannot be told apart/);
+    assert.ok(!t11.includes("信頼度") && !/confidence/.test(t11), "未検出のマスに信頼度は無い");
+    const mark = q(w, "fdi-16").querySelector('[data-dx-key="caries"] > title');
+    assert.equal(mark.textContent, dxTip("caries", lang));
+    for (const k of Object.keys(DX)) assert.ok(q(w, `legend-${k}`).querySelector("title").textContent.includes(dxTip(k, lang)), `legend-${k}`);
+    assert.ok(w.document.querySelector('[data-testid="dental-chart"] > title').textContent.length > 20);
+  }
+  // cellTip は純関数（検算できる）
+  const m = chartModel(normalizeResult({ rows: 1, cols: 1, device: "cpu", seconds: 1, model: "m", teeth: [tooth(46, 0, 0.8)], dx: [{ cls: "periapical", conf: 0.6, bbox: [1, 1, 8, 15] }] }));
+  assert.match(cellTip(m.find((c) => c.fdi === 46), "en"), /FDI 46 · detected \(confidence 0\.80\) · diagnosis candidates: Periapical lesion/);
+});
+
+test("tooltip（環境の枠）: 再確認・コマンドのコピーにも title がある", async () => {
+  const bad = { python: "/usr/bin/python3", pyVersion: "3.12.0", installed: { ultralytics: null, torch: null, numpy: "2", pillow: "11" }, need: { ultralytics: null, torch: null, numpy: null, pillow: null }, problem: "missing-packages: x", weights: {} };
+  const { w, host } = mount({ env: bad });
+  await activate(host);
+  q(w, "dp-run").click();
+  await until(() => q(w, "dp-env").style.display === "flex");
+  assert.deepEqual(untitled(w.document, ["dp-env-recheck", "dp-env-copy"]), []);
+});
+
+test("failureText / explain: 「日本語 ‖ English」から画面の言語の側だけを返す。区切りが無ければ全体（互換）", () => {
+  assert.equal(LANG_SEP, " \u2016 ");
+  const v = "bad-weights: teeth-seg.pt の内容が固定した版と違います" + LANG_SEP + "teeth-seg.pt does not match the pinned version";
+  assert.equal(failureText(v, "ja"), "teeth-seg.pt の内容が固定した版と違います");
+  assert.equal(failureText(v, "en"), "teeth-seg.pt does not match the pinned version");
+  assert.equal(failureText("missing-weights: 置いてください", "en"), "置いてください", "区切りが無ければそのまま（互換）");
+  assert.equal(failureText("broken-package: torch を読み込めません" + LANG_SEP + "Cannot load torch", "en"), "Cannot load torch");
+  assert.match(failureText("Boom: x", "en"), /Failed/);
+  assert.match(explain("dataset-local-only", "ja"), /この PC/);
+  assert.match(explain("dataset-local-only", "en"), /^This image can only be sent to this PC's compute endpoint.*\(dataset-local-only\)$/);
+  assert.ok(!JA.test(explain("dataset-local-only", "en")));
+  assert.equal(explain("zzz", "en"), "zzz");
+});
+
+test("Python の失敗理由はすべて 2 言語（正例）。日本語だけの失敗理由が残ると落ちる（負例）", () => {
+  // 静的: コード付きの失敗理由の行はすべて bi(...) を通す。検査は関数にして、実物と、日本語だけの行を混ぜたものの両方に当てる
+  const failureLines = (src) => src.split("\n").filter((l) => /(raise RuntimeError\(|return |problem = )'(missing-packages|unsupported-version|not-applicable|missing-weights|bad-weights|unsupported-model|broken-package): /.test(l));
+  const monolingual = (src) => failureLines(src).filter((l) => !/bi\(/.test(l));
+  assert.ok(failureLines(PY).length >= 10, "失敗理由の行の数: " + failureLines(PY).length);
+  assert.deepEqual(monolingual(PY), [], "2 言語にしていない失敗理由がある");
+  const mixed = PY + "\n    raise RuntimeError('not-applicable: 画素値が一定です')";
+  assert.equal(failureLines(mixed).length, failureLines(PY).length + 1, "混ぜた行を検査が見つける");
+  assert.equal(monolingual(mixed).length, 1, "負例: 日本語だけの失敗理由を 1 件混ぜると落ちる");
+  // 実行: Python の実際の出力が「日本語 ‖ English」になり、英語の側に日本語が混ざらない
+  const r = py(HEAD() + PY_PREP + `
+need = {'ultralytics': '9.9.9', 'torch': None}
+w = {'teeth': {'file': 't.pt', 'path': '/h/t.pt', 'exists': False, 'required': True, 'match': None}}
+b = {'teeth': {'file': 't.pt', 'path': '/h/t.pt', 'exists': True, 'required': True, 'match': False}}
+print(json.dumps([SEP, env_problem({'ultralytics': None, 'torch': '2.0'}, need), env_problem({'ultralytics': '9.0.0', 'torch': '2.0'}, need), weights_problem(w), weights_problem(b)]))`);
+  assert.equal(r.status, 0, r.stderr);
+  const [sep, ...msgs] = JSON.parse(r.stdout.trim());
+  assert.equal(sep, LANG_SEP);
+  assert.equal(msgs.length, 4);
+  for (const m of msgs) {
+    assert.equal(m.split(LANG_SEP).length, 3 - 1, "区切りは 1 つ: " + m);
+    const ja = failureText(m, "ja"), en = failureText(m, "en");
+    assert.ok(JA.test(ja), "ja に日本語が無い: " + ja);
+    assert.ok(en.length > 10 && !JA.test(en), "en に日本語が混ざる、または空: " + en);
+    assert.notEqual(ja, en);
+  }
+  assert.match(failureText(msgs[0], "en"), /^Install ultralytics on this compute endpoint \(pip install ultralytics==9\.9\.9\)$/);
+  assert.match(failureText(msgs[3], "en"), /^t\.pt does not match the pinned version/);
 });
