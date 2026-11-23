@@ -4,6 +4,9 @@
  * パノラマ X 線 1 枚から、歯の検出（FDI 番号）・診断候補・欠損歯・歯式チャート・構造化レポートを作る GRAPHY-Next のプラグイン。
  * 研究・教育用。診断機器ではない。
  *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * Copyright (c) 2026 Visionary Imaging Services, Inc.
+ *
  * 着想: Baseri Saadi S, et al. Panognostics-Plus. J Imaging Inform Med 2026. doi:10.1007/s10278-026-02479-w（CC BY 4.0）。
  * 論文の「検出 → 歯式への割り当て → チャート → 構造化レポート」の流れを再現する。モデルは論文のものではない（非公開）。
  *

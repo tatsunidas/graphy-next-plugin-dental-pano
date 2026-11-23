@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """検査用: パノラマの PNG を Modality PX の DICOM（1 枚・8bit・MONOCHROME2）にする。
 
 患者情報は合成（実在の患者ではない）。UID は毎回新規（同じ UID のまま作り直すと、アプリに古いメタデータが残ることがある）。

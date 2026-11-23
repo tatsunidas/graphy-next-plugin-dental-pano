@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // node --test   （Python 前半は numpy のある python3 で試す。GRAPHY_TEST_PYTHON で変えられる）
 // モデル本体（torch / ultralytics）は使わない。確かめるのは「割り当て・欠損歯・レポート・SR・CSV・チャート・計算機の前半・画面の往復」。
 // モデルの実行は実機（README の検証）で確かめる。
