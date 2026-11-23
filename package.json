@@ -1,6 +1,7 @@
 {
   "name": "graphy-next-plugin-dental-pano",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "test": "node --test",

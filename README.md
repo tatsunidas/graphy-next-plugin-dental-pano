@@ -1,9 +1,17 @@
 # graphy-next-plugin-dental-pano（試作）
 
-**研究・教育用。診断機器ではない。試作であり、配布しない（下の「ライセンス」を参照）。**
+**研究・教育用（Research Use Only）。診断機器ではありません。診断・治療の判断に使わないでください。**
+試作です。結果は誤りを含みます。ライセンスは AGPL-3.0（重みは下の「ライセンスと帰属」を必ず読んでください）。
 
 パノラマ X 線 1 枚（PX / DX / CR）から、歯の検出（FDI 番号）・診断の候補・欠損歯・歯式チャート・構造化レポートを作る
-GRAPHY-Next のプラグイン（`id: vis-dental-pano`、`engines.graphy >=0.6.0`）。計算はこの PC の計算機（Python）だけで行い、画像は外へ出ない。
+[GRAPHY-Next](https://github.com/tatsunidas/GRAPHY-Next) のプラグイン（`id: vis-dental-pano`、`engines.graphy >=0.6.3`）。計算はこの PC の計算機（Python）だけで行い、画像は外へ出ない。
+
+## 導入
+
+1. GRAPHY-Next（v0.6.3 以降）の 環境設定 ＞ プラグイン で、「URL / ZIP」に `tatsunidas/graphy-next-plugin-dental-pano` を入れて「GitHub から導入」する（または Release の zip を「ファイルから」）。
+2. この PC の計算機（Python）を用意する。環境設定 ＞ 計算機 で、`ultralytics`・`torch`・`numpy`・`pillow`・`jupyter_server`・`ipykernel` の入った Python を指定する。足りないものは、実行時の事前チェックが導入コマンドつきで知らせる（下の「計算機の環境」）。
+3. 重みを置く。[Releases](https://github.com/tatsunidas/graphy-next-plugin-dental-pano/releases) から `teeth-seg.pt`（必須）と `dx-det.pt`（任意）を取得し、`~/.graphy-next/models/vis-dental-pano/`（Windows は `%USERPROFILE%\.graphy-next\models\vis-dental-pano\`）に置く。**重みは下の「ライセンスと帰属」の条件で配布している**。
+4. パノラマ X 線（PX / DX / CR の 1 枚）を 2D ビューアで開き、解析（Analysis）メニューからこのプラグインを起動して［実行］。
 
 ## 着想と、論文との違い
 
@@ -16,15 +24,15 @@ doi:10.1007/s10278-026-02479-w（CC BY 4.0）。
 
 | | 論文 | このプラグイン（V1 試作） |
 |---|---|---|
-| 対象 | 歯・歯槽骨頂・上顎洞底／インプラント・ブリッジ・根管・クラウン・充填／歯根嚢胞・根尖肉芽腫 | 歯（永久歯 32 本・FDI）。診断の候補 4 種（う蝕・深在性う蝕・根尖病変・埋伏歯）は**学習が未了で、現状は診断モデル無し**。治療 5 種・上顎洞底・歯槽骨頂は公開データが見つからず対象外 |
+| 対象 | 歯・歯槽骨頂・上顎洞底／インプラント・ブリッジ・根管・クラウン・充填／歯根嚢胞・根尖肉芽腫 | 歯（永久歯 32 本・FDI）。診断の候補 4 種（う蝕・深在性う蝕・根尖病変・埋伏歯）。治療 5 種・上顎洞底・歯槽骨頂は公開データが見つからず対象外 |
 | 構成 | 項目ごとに 検出 → ROI → セグメンテーションの 2 段 | 1 段（歯はインスタンスセグメンテーション、診断は検出） |
 | 割り当て | 治療の枠と歯の枠の重なり最大 | 診断の枠と歯の枠の重なり最大（同じ考え方）。重なり 0 は「歯を特定できず」 |
 | 出力 | オーバーレイ・歯式チャート・Word レポート | 画像への輪郭（ROI）・歯式チャート（SVG）・テキスト・DICOM SR・CSV・レポート画面への登録。Word は未対応 |
-| 評価 | 1,595 枚・5 分割 CV・独立テスト 20% | `RESULTS.md`（`dental-pano-models`）。データ・分割が違うので直接比較しない |
+| 評価 | 1,595 枚・5 分割 CV・独立テスト 20% | 公開データ DENTEX の中の分割（下の「現在の状態」）。データ・分割が違うので直接比較しない |
 
 ## 現在の状態（2026-11-22 時点）
 
-数値は `dental-pano-models` の `RESULTS.md`（test は学習にも重みの選択にも使っていない分割。**同じ DENTEX の中の分割で、外部施設・他機種での検証ではない**）。
+test は学習にも重みの選択にも使っていない分割。**同じ DENTEX の中の分割で、外部施設・他機種での検証ではない**。学習・評価のコードは別のリポジトリ（非公開）にあり、ここには数値の要約だけを載せる。
 
 | 部分 | 状態 |
 |---|---|
@@ -46,13 +54,13 @@ doi:10.1007/s10278-026-02479-w（CC BY 4.0）。
 ## できないこと・注意
 
 - 「検出されなかった永久歯」は、**欠損・補綴（インプラント・ブリッジ）・未萌出・乳歯・検出漏れを区別できない**。乳歯・混合歯列は対象外
-- 面積・距離は出さない。パノラマの拡大率は位置で変わり、mm に直せない（SR も所見のみで、計測値を入れない）。このプラグインが置いた ROI には、本体が面積・平均値の文字を出さない（`createRoi` の `showStats: false`。対応した版の本体のみ。古い本体では出るが、**パノラマの mm² は信用できないので参考にしない**。ROI のテキストは本体の［Text］で隠せる）
+- 面積・距離は出さない。パノラマの拡大率は位置で変わり、mm に直せない（SR も所見のみで、計測値を入れない）。このプラグインが置いた ROI には、本体が面積・平均値の文字を出さない（`createRoi` の `showStats: false`。本体 v0.6.5 より後の版のみ。v0.6.5 以前の本体では出るが、**パノラマの mm² は信用できないので参考にしない**。ROI のテキストは本体の［Text］で隠せる）
 - 部位は判定しない。パノラマ以外の X 線でも実行はできるが、結果は無意味
 - 外部の施設での検証はしていない。臨床の判断に使わない
 
 ## 画像の条件
 
-- Modality は PX・DX・CR の 1 枚。PX・IO は本体で「焼き込みの危険な種類」（外部の計算機へは送らない、この PC の計算機だけ）。本体 PR #652 で追加（**この版の本体が要る**）
+- Modality は PX・DX・CR の 1 枚。PX・IO は本体で「焼き込みの危険な種類」（外部の計算機へは送らない、この PC の計算機だけ）。本体 v0.6.3 で追加（**v0.6.3 以降の本体が要る**）
 - **画素間隔（PixelSpacing など）の無い画像には、本体が ROI を置けない**（`no-geometry`）。その場合も歯式チャートとレポートは出し、理由を画面に出す
 - `BurnedInAnnotation=YES` と宣言された画像は、マスクを登録しないと本体が計算機へ渡さない（local でも）。機器によっては宣言される
 
@@ -62,18 +70,25 @@ doi:10.1007/s10278-026-02479-w（CC BY 4.0）。
 ［再確認］を出す（環境は書き換えない。入れるのは利用者。本体の再起動は要らない）。
 
 - パッケージ: `ultralytics`・`torch`・`numpy`・`pillow`
-- 重み（同梱しない）: `~/.graphy-next/models/vis-dental-pano/` に `teeth-seg.pt`（必須。125,015,124 B）、`dx-det.pt`（任意。44,112,409 B）。`ui.js` の `WEIGHTS` に sha256 を固定してあり、内容が違えば止める（歯 `75dd697a…`・診断 `62a498a7…`）。入手は `dental-pano-models` の private Release
+- 重み（同梱しない）: `~/.graphy-next/models/vis-dental-pano/` に `teeth-seg.pt`（必須。125,015,124 B）、`dx-det.pt`（任意。44,112,409 B）。`ui.js` の `WEIGHTS` に sha256 を固定してあり、内容が違えば止める。入手はこのリポジトリの Release（`SHA256SUMS` つき）。sha256: 歯 `75dd697a133d1cf9474228e3ca2e5993722334ceffa4a68f23064bd6eb1a16d7`、診断 `62a498a7c000a5462bf716d7b854bb3c5812d7dae8d173bc4a64309e12f4f4e8`
 - 1 枚あたり: GPU（GTX 1050 Ti 4 GB）で約 5 秒。GPU で失敗したら CPU でやり直す（メモリ不足・torch に GPU 用のカーネルが無い・cuDNN が古い GPU に非対応のとき）
 - **旧世代の GPU（Pascal など）の注意**: torch 2.15 の既定ビルド（CUDA 13）は Pascal（sm_61）のカーネルを含まず、cuDNN 9.11 以降も SM 7.5 未満に非対応。CUDA は「使える」と返るのに動かない。プラグインは `cuda_usable` で判定して CPU に退避するが、GPU で動かすなら torch の cu126 ビルド＋ `nvidia-cudnn-cu12==9.10.2.21` が要る（2026-11-09 に GTX 1050 Ti で確認）
 
-## ライセンス（配布の前に判断が要る）
+## ライセンスと帰属
 
-- **Ultralytics（YOLO）は AGPL-3.0**。学習済み重みも AGPL と Ultralytics は主張している。**private のまま第三者へ配布（Release 公開）すると AGPL に反する**。
-  このプラグインは試作・社内評価までで、配布しない。配布するなら (a) プラグインと重みを AGPL-3.0 で公開する、(b) Ultralytics の Enterprise ライセンスを契約する、のどちらかを先に決める
-- 取得した `.pt`（pickle）は、読み込む前に、含まれる参照先を静的に調べた（ultralytics・torch・collections・set だけ）。出所不明の重みを無検査で読み込まない
-- 学習データ DENTEX: Zenodo は CC BY 4.0、GitHub・Hugging Face は CC BY-NC-SA 4.0 と**表記が食い違う**。厳しい方（非商用）で扱う
-- 歯の重みは Kölüş & Güleç 2025（Mendeley Data、CC BY 4.0、DOI 10.17632/83k2rtz4bc.1）を DENTEX で fine-tune した派生。帰属表示が要る。診断の重みは DENTEX で学習した。**DENTEX の表記が食い違うので、2 つの重みとも非商用として扱う**
-- このプラグイン自体の `license` は未確定（`UNLICENSED`）
+**プラグインのコード**: [AGPL-3.0](LICENSE)（Copyright (c) 2026 Visionary Imaging Services, Inc.）。実行時に Ultralytics（YOLO、AGPL-3.0）を呼ぶため、同じライセンスにそろえている。改変して配布する、またはネットワーク越しのサービスとして提供する場合は、AGPL-3.0 に従ってソースを公開すること。
+
+**重み（Release の `teeth-seg.pt`・`dx-det.pt`）**: 研究・教育用として配布する。次の条件と帰属を守って使うこと。
+
+- **Ultralytics の YOLO で学習したモデル**（YOLO11x-seg・YOLO26m）。Ultralytics は学習済みの重みにも AGPL-3.0 が及ぶとしている。重みは AGPL-3.0 で配布する。AGPL-3.0 に従えない用途（ソースを公開しない製品への組み込みなど）には、Ultralytics の Enterprise ライセンスが要る。
+- **歯の重み `teeth-seg.pt`** は、Kölüş & Güleç 2025 の公開重み（Mendeley Data、CC BY 4.0、doi:10.17632/83k2rtz4bc.1）を、DENTEX の歯の注釈 444 枚で fine-tune した派生物。**元の重みの作者への帰属表示が要る**。
+- **診断の重み `dx-det.pt`** は、DENTEX の診断の注釈 494 枚で学習した。
+- **学習データ DENTEX**（Hamamci et al., DENTEX Challenge 2023）: 配布元によって表記が食い違う。Zenodo（record 7812323。学習に使ったのはここから取得したもの）は CC BY 4.0、GitHub・Hugging Face は CC BY-NC-SA 4.0。**この食い違いは解消できていないので、重みは非商用（研究・教育）の範囲で使うこと**。商用の利用を考える場合は、DENTEX の権利者に条件を確かめること。
+- 重みの `.pt` は pickle を含む。配布している重みは、含まれる参照先が ultralytics・torch・collections・set だけであることを静的に調べてある。**このリポジトリの Release 以外から得た重みを、検査せずに読み込まないこと**（プラグインは sha256 が一致しない重みを止める）。
+
+**着想を得た論文**: Baseri Saadi S, et al. *Panognostics-Plus.* J Imaging Inform Med 2026. doi:10.1007/s10278-026-02479-w（CC BY 4.0）。論文のモデル・コード・重みは使っていない。
+
+**無保証**: 研究用の試作であり、医療機器ではない。外部施設での検証はしていない。出力を診断・治療の判断に使わないこと。
 
 ## 開発
 
