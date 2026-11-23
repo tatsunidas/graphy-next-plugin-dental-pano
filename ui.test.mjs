@@ -424,6 +424,7 @@ test("画面（既定のまま）: 開く → 実行 → チャート・輪郭�
   assert.match(q(w, "dp-report").value, /根尖病変の候補がある歯: 46/);
   // 既定で歯の輪郭と診断の枠が置かれる（3 本 + 2 診断）
   assert.equal(calls.createRoi.length, 5);
+  assert.ok(calls.createRoi.every((c) => c.showStats === false), "歯・診断のすべての ROI で showStats === false（統計の文字を出さない）");
   assert.deepEqual(calls.createRoi.map((c) => c.label).slice(0, 3), ["FDI 17", "FDI 16", "FDI 46"], "歯は上顎 18→28、下顎 48→38 の並びで置く");
   assert.equal(q(w, "dp-show-teeth").checked, true);
   assert.equal(q(w, "dp-show-dx").checked, true);

@@ -149,7 +149,7 @@ const S = {
       cellMissing: (/** @type {number} */ fdi) => `FDI ${fdi}・検出されませんでした。欠損・補綴（インプラント・ブリッジ）・未萌出・乳歯・検出漏れのどれかは、区別できません。`,
       overlays: "画像の上に、検出した歯の輪郭や診断候補の枠を重ねて表示します。チェックで出し入れできます。",
       legend: "診断の色の凡例です。歯のマスの下の色の印が、その歯に診断の候補があることを示します。",
-      showTeeth: "検出した歯の輪郭を、画像に ROI として置きます。外すと消えます。本体が ROI に出す面積・平均値は、パノラマでは参考にしないでください。",
+      showTeeth: "検出した歯の輪郭を、画像に ROI として置きます。外すと消えます。この ROI には面積・平均値の文字を出しません（対応した版の本体。古い本体では出ますが、パノラマでは参考にしないでください）。",
       showDx: "診断候補の枠を、画像に ROI として置きます。外すと消えます。" + DX_BOX_NOTE.ja,
       clear: "このプラグインが置いた ROI をすべて消します。画像にある他の ROI は消しません。",
       dxTable: "診断候補の一覧です。種類・割り当てた歯・信頼度を出します。信頼度はモデルの出力値で、確率としては較正していません。",
@@ -242,7 +242,7 @@ const S = {
       cellMissing: (/** @type {number} */ fdi) => `FDI ${fdi} · not detected. It cannot be told apart from true absence, a prosthesis (implant, bridge), an unerupted or deciduous tooth, or a missed detection.`,
       overlays: "Draws the detected tooth outlines and the diagnosis boxes on top of the image. Use the checkboxes to show or hide them.",
       legend: "Colour legend for diagnoses. A coloured mark under a tooth cell means this tooth has a diagnosis candidate.",
-      showTeeth: "Places the detected tooth outlines on the image as ROIs. Unchecking removes them. Do not rely on the area and mean values the viewer shows for ROIs on a panoramic image.",
+      showTeeth: "Places the detected tooth outlines on the image as ROIs. Unchecking removes them. No area or mean text is shown on these ROIs (in a viewer version that supports this; an older viewer still shows it, and on a panoramic image do not rely on it).",
       showDx: "Places the diagnosis boxes on the image as ROIs. Unchecking removes them. " + DX_BOX_NOTE.en,
       clear: "Removes every ROI this plugin placed. Other ROIs on the image are not touched.",
       dxTable: "List of diagnosis candidates: type, assigned tooth and confidence. Confidence is the model's output value and is not calibrated as a probability.",
@@ -596,7 +596,7 @@ export function placeRois(host, tileId, kind, res) {
   /** @type {Record<string, number>} */
   const reasons = {};
   const fail = (/** @type {string} */ reason) => { failed++; reasons[reason] = (reasons[reason] ?? 0) + 1; return null; };
-  const create = (/** @type {number[][]} */ verts, /** @type {string} */ label) => host.createRoi(tileId, { tool: "PolygonROI", verticesPx: verts, label });
+  const create = (/** @type {number[][]} */ verts, /** @type {string} */ label) => host.createRoi(tileId, { tool: "PolygonROI", verticesPx: verts, label, showStats: false });
   const place = (/** @type {number[][] | null} */ poly, /** @type {number[]} */ bbox, /** @type {string} */ label) => {
     for (const max of [64, 32, 16]) {
       const v = poly ? simplifyPolygon(poly, max) : null;
