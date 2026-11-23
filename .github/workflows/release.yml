@@ -28,6 +28,12 @@ jobs:
         with:
           node-version: "20"
 
+      # テストが計算機の前半（numpy）を python3 で動かす。モデル本体（torch / ultralytics）は要らない
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install numpy
+
       # 重み（*.pt）は zip に入れない。下書きの Release に人が手で添付する。
       - name: Install dev dependencies
         run: npm ci
