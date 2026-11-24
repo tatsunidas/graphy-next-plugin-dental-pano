@@ -8,10 +8,142 @@
 
 ## 導入
 
-1. GRAPHY-Next（v0.6.3 以降）の 環境設定 ＞ プラグイン で、「URL / ZIP」に `tatsunidas/graphy-next-plugin-dental-pano` を入れて「GitHub から導入」する（または Release の zip を「ファイルから」）。
-2. この PC の計算機（Python）を用意する。環境設定 ＞ 計算機 で、`ultralytics`・`torch`・`numpy`・`pillow`・`jupyter_server`・`ipykernel` の入った Python を指定する。足りないものは、実行時の事前チェックが導入コマンドつきで知らせる（下の「計算機の環境」）。
-3. 重みを置く。[Releases](https://github.com/tatsunidas/graphy-next-plugin-dental-pano/releases) から `teeth-seg.pt`（必須）と `dx-det.pt`（任意）を取得し、`~/.graphy-next/models/vis-dental-pano/`（Windows は `%USERPROFILE%\.graphy-next\models\vis-dental-pano\`）に置く。**重みは下の「ライセンスと帰属」の条件で配布している**。
-4. パノラマ X 線（PX / DX / CR の 1 枚）を 2D ビューアで開き、解析（Analysis）メニューからこのプラグインを起動して［実行］。
+導入は 4 段です。**(1) プラグイン本体 → (2) この PC の計算機（Python）→ (3) モデルの重み → (4) 実行**。(2) と (3) は、プラグインを入れただけでは入りません（下の「なぜ手で入れるのか」）。初回だけ 20〜30 分ほど見てください（重みの取得と、`torch` の導入に時間がかかります）。
+
+### 0. 用意するもの
+
+| 必要なもの | 内容 |
+|---|---|
+| GRAPHY-Next 本体 | **v0.6.3 以降**（このプラグインが要る機能が入った版）。動作確認は v0.6.6（Linux の AppImage）。v0.6.5 以前では、置いた輪郭の脇に面積などの文字が重なって出ます（mm² は信用できません）。**最新版をお勧めします** |
+| Python | この PC に入っている Python 3（動作確認は 3.13.5。ほかの版は未確認）。専用の仮想環境を作ってもよい |
+| ディスクの空き | 重み 約 170 MB（125 MB ＋ 44 MB）。`torch` などの Python パッケージの分が、別に要ります（容量は環境しだいで、未計測） |
+| 画像 | パノラマ X 線 1 枚（Modality が PX・DX・CR）。**画素間隔（PixelSpacing など）が無い画像には、輪郭を置けません**（歯式チャートとレポートは出ます） |
+| GPU | 無くても動く（CPU のみ）。ある場合の注意は「手順 2」の最後に |
+
+### 1. プラグイン本体を入れる
+
+1. GRAPHY-Next を起動し、画面右上の Settings（環境設定）を開いて、左の一覧から **Plugins（プラグイン）** を選びます。
+2. **Allow installing plugins** にチェックを入れます。**既定では、プラグインの導入は許可されていません。** 導入したプラグインは、本体と同じ権限で動くので、署名を確かめられる出所だけを入れてください。
+3. **URL / ZIP** のタブを開き、欄に次を入れて **Install from GitHub** を押します。
+
+   ```
+   tatsunidas/graphy-next-plugin-dental-pano
+   ```
+
+   版を決めたいときは、右の「version (optional)」に版を入れます（空のままなら、版は指定しません）。
+4. 導入できたら、**Installed** のタブを開き、このプラグイン（Dental Panoramic Chart (prototype)）の行の信頼の欄が **verified** になっていることを確かめます。verified は、公式の鍵で署名を確かめられた、という意味です。verified でないときは、**使わずに**、導入元（上の `owner/repo`）が正しいかを確かめてください。
+5. メニューに反映するため、本体を**再読み込み（または再起動）**します。
+
+> **インターネットにつながらない PC（オフライン）の場合**: Release から `vis-dental-pano-0.1.0.zip` と `vis-dental-pano-0.1.0.zip.minisig` を取得し、**Install from zip** で zip を選びます。署名つきで入れ直すときは、同じ画面で、対応する `.minisig` のファイルも選びます。
+
+### 2. この PC の計算機（Python）を用意する
+
+このプラグインの計算は、**この PC の中の Python だけ**で行います。画像は外へ出ません。
+
+1. Settings の **Compute (This PC / External)**（計算機）で、この PC の計算機を使えるようにし、使う Python を指定します。その Python には、`jupyter_server` と `ipykernel` が要ります。入っていないときは、実行時に「この PC の計算機を使えません（Python・jupyter_server・ipykernel が揃っていません）」と出ます。そのときは、次を実行します（`<python>` は指定した Python のパス）。
+
+   ```
+   <python> -m pip install jupyter_server ipykernel
+   ```
+
+2. パノラマ X 線を 2D ビューアで開き、**Analysis** メニューからこのプラグインを開いて、**［Run］**を押します（手順 4 の最初の部分です）。
+3. 足りないパッケージがあれば、画像を送らない**事前チェック**が、次の 3 つを出して止まります。
+   - 使われる Python のパスと版
+   - 足りないパッケージの一覧（`ultralytics==8.4.208`・`torch`・`numpy`・`pillow`。版が決まっているのは ultralytics だけ）
+   - **その Python を名指しした導入コマンド**と、［Copy command］・［Re-check］のボタン
+4. ［Copy command］で導入コマンドをコピーし、**ターミナル（Windows は PowerShell かコマンドプロンプト）**で実行します。例（パスは自分の環境のものになります）:
+
+   ```
+   /path/to/python3 -m pip install ultralytics==8.4.208 torch numpy pillow
+   ```
+
+   パスに空白があって引用符で囲まれているときは、PowerShell では先頭に `&` を付けます。**このプラグインは、環境を勝手には書き換えません。入れるのは利用者です。**
+5. 入れ終わったら、**［Re-check］（再確認）**を押します。**本体の再起動は要りません。** 全部そろえば、事前チェックの表は消えます。
+
+> **GPU（CUDA）を使いたい場合**: 上のコマンドで入る `torch` は、環境によっては CPU 用です。GPU を使うときは、`torch` だけを、PyTorch の公式（pytorch.org）の案内どおりに入れてください。GPU で失敗したときは、自動で CPU でやり直します。
+> **旧世代の GPU（Pascal など。GTX 10 シリーズ）**: torch 2.15 の既定のビルド（CUDA 13）には、この GPU 用の計算部品がありません。「CUDA は使える」と返るのに動きません。プラグインはこれを見抜いて CPU に切り替えますが、GPU で動かすなら、torch の cu126 ビルドと `nvidia-cudnn-cu12==9.10.2.21` が要ります（GTX 1050 Ti で確認）。**CPU だけの環境は、依存を入れたあとの確認が未了です。**
+
+### 3. モデルの重みを置く
+
+**重みはプラグインに入っていません。** 導入しても自動では入らないので、自分で取得して、決まったフォルダに置きます。
+
+1. [Releases](https://github.com/tatsunidas/graphy-next-plugin-dental-pano/releases) のページを開き、次の 2 つをダウンロードします。
+
+   | ファイル | 役割 | 大きさ | 必須か |
+   |---|---|---|---|
+   | `teeth-seg.pt` | 歯の検出（FDI 番号）と輪郭 | 125,015,124 B（約 125 MB） | **必須** |
+   | `dx-det.pt` | 診断の候補（う蝕・深在性う蝕・根尖病変・埋伏歯） | 44,112,409 B（約 44 MB） | 任意 |
+
+   `dx-det.pt` を置かなければ、診断の候補は出さず、歯と「検出されなかった歯」だけを出します。
+2. 次のフォルダに置きます。**プラグインの導入先ではなく、自分のホームフォルダの下です。**
+
+   | OS | 置き場所 |
+   |---|---|
+   | Linux・macOS | `~/.graphy-next/models/vis-dental-pano/` |
+   | Windows | `%USERPROFILE%\.graphy-next\models\vis-dental-pano\` |
+
+   フォルダが無ければ作ります。
+
+   ```bash
+   # Linux・macOS
+   mkdir -p ~/.graphy-next/models/vis-dental-pano
+   mv ~/Downloads/teeth-seg.pt ~/Downloads/dx-det.pt ~/.graphy-next/models/vis-dental-pano/
+   ```
+
+   ```powershell
+   # Windows（PowerShell）
+   New-Item -ItemType Directory -Force "$env:USERPROFILE\.graphy-next\models\vis-dental-pano"
+   Move-Item "$env:USERPROFILE\Downloads\teeth-seg.pt","$env:USERPROFILE\Downloads\dx-det.pt" "$env:USERPROFILE\.graphy-next\models\vis-dental-pano\"
+   ```
+3. **（任意）ファイルが壊れていないか確かめる。** プラグインは実行のたびに、重みの SHA-256（ファイルの指紋）を、固定した値と照合します。置く前に自分で確かめたいときは、次の値と比べます（Release の `SHA256SUMS` にも同じ値があります）。
+
+   | ファイル | SHA-256 |
+   |---|---|
+   | `teeth-seg.pt` | `75dd697a133d1cf9474228e3ca2e5993722334ceffa4a68f23064bd6eb1a16d7` |
+   | `dx-det.pt` | `62a498a7c000a5462bf716d7b854bb3c5812d7dae8d173bc4a64309e12f4f4e8` |
+
+   ```bash
+   sha256sum ~/.graphy-next/models/vis-dental-pano/*.pt          # Linux
+   shasum -a 256 ~/.graphy-next/models/vis-dental-pano/*.pt      # macOS
+   ```
+   ```powershell
+   Get-FileHash "$env:USERPROFILE\.graphy-next\models\vis-dental-pano\*.pt" -Algorithm SHA256   # Windows
+   ```
+4. 置いたら、プラグインの画面で **［Re-check］** を押します。本体の再起動は要りません。
+
+**重みは、下の「ライセンスと帰属」の条件で配布しています。必ず読んでください**（研究・教育用の範囲で使うこと）。
+
+#### なぜ手で入れるのか
+
+- 重みには**ライセンスと帰属の条件**があり、研究・教育用として別に配布しているからです。
+- 重みの `.pt` ファイルは、読み込むときにプログラムが動くことがあります（pickle を含む）。そのため、**このリポジトリの Release の決まった版（SHA-256 が一致するもの）しか動かさない**作りにしてあります。**Release 以外から得た重みを、検査せずに置かないでください。**
+
+### 4. 実行する
+
+1. パノラマ X 線（PX / DX / CR の 1 枚）を 2D ビューアで開きます。
+2. **Analysis** メニューから、このプラグイン（Dental Panoramic Chart (prototype)）を開き、**［Run］（実行）**を押します。
+3. 実行のたびに**同意画面**が出ます。何をどこへ渡すのか（この PC の計算機。画像は外へ出ない）と、実行されるコードを確かめてから進みます。
+4. 結果が出ます。歯式チャート（FDI）、画像の上の歯の輪郭と診断の枠、診断の候補の表、レポート（下書き）です。DICOM SR・CSV での保存と、本体のレポート画面への登録もできます。
+
+1 枚あたり、GPU（GTX 1050 Ti 4 GB）で約 5 秒でした。CPU だけの所要時間は未計測です。
+
+### うまくいかないとき
+
+| 画面の表示（日本語 ‖ English のうち、画面の言語のほう） | 原因と直し方 |
+|---|---|
+| 「重み `teeth-seg.pt` がありません。（フォルダ）に置いてください」（`missing-weights`） | 重みが無い、またはフォルダが違います。表示されたフォルダに置きます。`dx-det.pt` は任意なので、無くても実行できます |
+| 「内容が固定した版と違います（sha256 不一致）。置き直してください」（`bad-weights`） | ファイルが壊れているか、別のファイルです。Release から取り直して置き直します。**ほかの場所から得た重みは使えません** |
+| 「Something is missing. Install it as shown below, then press Re-check.」 | パッケージが足りません。表示された導入コマンドを、**表示された Python で**実行し、［Re-check］を押します |
+| 「この PC の計算機を使えません（Python・jupyter_server・ipykernel が揃っていません）」（`local-unavailable`） | 手順 2 の 1 を実行します |
+| 「このプラグインに計算機を使う許可がありません」（`permission-denied`） | プラグインの権限の問題です。直し方は未確認です（Issue に知らせてください） |
+| 輪郭が置けず、理由が出る（`no-geometry`） | 画素間隔の無い画像です。歯式チャートとレポートは出ます |
+| プラグインがメニュー（Analysis）に出ない | 本体を再読み込み（または再起動）します。それでも出なければ、本体が v0.6.3 以降か確かめます |
+| 「画像が大きすぎます」（`npz-too-large`） | 画像が大きすぎて、計算機へ渡せません。小さい画像で試してください |
+
+### 更新・削除
+
+- 更新: 新しい版を、手順 1 の画面から入れ直します（更新の細かい動きは未確認です）。**重みはプラグインの外（ホームフォルダ）にあるので、プラグインを入れ替えても残る設計です**。重みが見つからないと出たら、手順 3 を確かめてください。
+- 削除: Settings の Plugins の **Installed** から外します。重みは自動では消えないので、不要なら `~/.graphy-next/models/vis-dental-pano/` を自分で削除します。
 
 ## 着想と、論文との違い
 
